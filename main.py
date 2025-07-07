@@ -1,32 +1,20 @@
 import logging
 import sqlite3
-import asyncio
 import os
 from datetime import datetime, timedelta
-import json
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from collections import Counter
-from flask import Flask
-import threading
-
-# טעינת משתני סביבה
-BOT_TOKEN = os.getenv('BOT_TOKEN', "7622868890:AAEnk_PC-hbOJIYWICXgE8F654RlOJxY5Sk")
 
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# יצירת שרת Flask לRender
-app = Flask(__name__)
+# טוקן הבוט
+BOT_TOKEN = os.getenv('BOT_TOKEN', "7622868890:AAEnk_PC-hbOJIYWICXgE8F654RlOJxY5Sk")
 
-@app.route('/')
-def hello():
-    return "🤖 בוט החרדה פועל! Bot is running!"
-
-@app.route('/health')
-def health():
-    return "OK"
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN לא נמצא!")
 
 # הגדרת בסיס הנתונים
 def init_database():
@@ -578,8 +566,8 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     """לוג שגיאות"""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
-def run_telegram_bot():
-    """פונקציה להפעלת בוט הטלגרם"""
+def main():
+    """פונקציה ראשית"""
     try:
         # יצירת בסיס נתונים
         init_database()
@@ -595,26 +583,13 @@ def run_telegram_bot():
         # הוספת error handler
         application.add_error_handler(error_handler)
         
-        logger.info("🤖 בוט הטלגרם מתחיל לרוץ...")
-        
         # הרצת הבוט
+        logger.info("🤖 הבוט מתחיל לרוץ...")
         application.run_polling()
             
     except Exception as e:
         logger.error(f"שגיאה בהפעלת הבוט: {e}")
         raise
-
-def main():
-    """פונקציה ראשית"""
-    # הפעלת בוט הטלגרם ברקע
-    bot_thread = threading.Thread(target=run_telegram_bot)
-    bot_thread.daemon = True
-    bot_thread.start()
-    
-    # הפעלת שרת Flask
-    port = int(os.environ.get('PORT', 8000))
-    logger.info(f"🌐 שרת Flask מתחיל על פורט {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
 
 if __name__ == '__main__':
     main()
