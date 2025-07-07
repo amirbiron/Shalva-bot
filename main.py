@@ -142,11 +142,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # הצעה למוזיקה מרגיעה
     music_keyboard = [
         [InlineKeyboardButton("🎵 כן, אשמח לשיר מרגיע", callback_data="relaxing_music")],
-        [InlineKeyboardButton("▶️ בוא נתחיל", callback_data="start_using")]
+        [InlineKeyboardButton("🚀 לא, בוא נתחיל", callback_data="start_using")]
     ]
     
     await update.message.reply_text(
-        "🎶 רוצה להתחיל עם שיר מרגיע? יש לי קולקציה של שירים שנמצאו מחקרית הכי מרגיעים במצבי סטרס:",
+        "🎶 רוצה לפני שנתחיל לשים שיר מרגיע? יש לי קולקציה של שירים שנמצאו מחקרית הכי מרגיעים במצבי סטרס:",
         reply_markup=InlineKeyboardMarkup(music_keyboard)
     )
 
@@ -292,8 +292,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await show_relaxing_music(query, context)
     elif data == "start_using":
         await query.edit_message_text(
-            "מעולה! אני כאן בשבילך. בחר מה מתאים לך עכשיו:",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 לתפריט הראשי", callback_data="back_to_main")]])
+            "🎯 מעולה! אני כאן בשבילך.\n\nבחר מה מתאים לך עכשיו דרך התפריט שמופיע למטה בצ'אט:"
         )
 
 async def complete_quick_report(query, context):
@@ -634,7 +633,7 @@ async def show_relaxing_music(query, context):
 """
     
     keyboard = [
-        [InlineKeyboardButton("▶️ בוא נתחיל עכשיו", callback_data="start_using")],
+        [InlineKeyboardButton("🚀 בוא נתחיל עכשיו", callback_data="start_using")],
         [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
     ]
     
