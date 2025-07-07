@@ -615,23 +615,23 @@ async def show_relaxing_music_message(update: Update, context: ContextTypes.DEFA
     music_text = """
 🎵 שירים מרגיעים (מוכחים מחקרית לירידה בסטרס):
 
-🎼 "Someone Like You" - Adele
+# 🎼"Someone Like You" - Adele
 🎧 יוטיוב: https://youtu.be/hLQl3WQQoQ0
 🎶 ספוטיפיי: https://open.spotify.com/track/4gSMuI5TqvCKk0s0iY3I7I
 
-🎼 "Please Don't Go" - Barcelona  
+# 🎼 "Please Don't Go" - Barcelona  
 🎧 יוטיוב: https://youtu.be/-kizV91zQ_0
 🎶 ספוטיפיי: https://open.spotify.com/track/0lRnbYaPtv0A5OezVahO8e
 
-🎼 "Strawberry Swing" - Coldplay
+# 🎼 "Strawberry Swing" - Coldplay
 🎧 יוטיוב: https://youtu.be/h3pJZSTQqIg
 🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh
 
-🎼 "Watermark" - Enya
+# 🎼 "Watermark" - Enya
 🎧 יוטיוב: https://youtu.be/bPCdsa7hS7M
 🎶 ספוטיפיי: https://open.spotify.com/track/4vOQ55pOMyE6bQJJzm3kei
 
-🎼 "Weightless" - Marconi Union
+# 🎼 "Weightless" - Marconi Union
 🎧 יוטיוב: https://youtu.be/UfcAVejslrU
 🎶 ספוטיפיי: https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6
 
@@ -997,23 +997,23 @@ async def show_relaxing_music(query, context):
     music_text = """
 🎵 שירים מרגיעים (מוכחים מחקרית לירידה בסטרס):
 
-🎼 "Someone Like You" - Adele
+# 🎼 "Someone Like You" - Adele
 🎧 יוטיוב: https://youtu.be/hLQl3WQQoQ0
 🎶 ספוטיפיי: https://open.spotify.com/track/4gSMuI5TqvCKk0s0iY3I7I
 
-🎼 "Please Don't Go" - Barcelona  
+# 🎼 "Please Don't Go" - Barcelona  
 🎧 יוטיוב: https://youtu.be/-kizV91zQ_0
 🎶 ספוטיפיי: https://open.spotify.com/track/0lRnbYaPtv0A5OezVahO8e
 
-🎼 "Strawberry Swing" - Coldplay
+# 🎼 "Strawberry Swing" - Coldplay
 🎧 יוטיוב: https://youtu.be/h3pJZSTQqIg
 🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh
 
-🎼 "Watermark" - Enya
+# 🎼 "Watermark" - Enya
 🎧 יוטיוב: https://youtu.be/bPCdsa7hS7M
 🎶 ספוטיפיי: https://open.spotify.com/track/4vOQ55pOMyE6bQJJzm3kei
 
-🎼 "Weightless" - Marconi Union
+# 🎼 "Weightless" - Marconi Union
 🎧 יוטיוב: https://youtu.be/UfcAVejslrU
 🎶 ספוטיפיי: https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6
 
