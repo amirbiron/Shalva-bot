@@ -976,7 +976,7 @@ def main():
         raise
 
 if __name__ == '__main__':
-    main()8YDmx0QYEh
+    main()
 
 🎼 "Watermark" - Enya
 🎧 יוטיוב: https://youtu.be/bPCdsa7hS7M
