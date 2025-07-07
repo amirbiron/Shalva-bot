@@ -978,11 +978,11 @@ def main():
 if __name__ == '__main__':
     main()
 
-🎼 "Watermark" - Enya
+"Watermark" - Enya
 🎧 יוטיוב: https://youtu.be/bPCdsa7hS7M
 🎶 ספוטיפיי: https://open.spotify.com/track/4vOQ55pOMyE6bQJJzm3kei
 
-🎼 "Weightless" - Marconi Union
+"Weightless" - Marconi Union
 🎧 יוטיוב: https://youtu.be/UfcAVejslrU
 🎶 ספוטיפיי: https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6
 
