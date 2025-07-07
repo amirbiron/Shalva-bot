@@ -535,7 +535,7 @@ def create_quick_report_conversation():
                 MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_quick_description)
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות)$"), get_quick_description)
             ],
             QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^anxiety_")]
         },
@@ -578,7 +578,7 @@ def create_venting_conversation():
                 MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_venting_content)
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות)$"), get_venting_content)
             ],
             VENTING_SAVE: [CallbackQueryHandler(save_venting_choice, pattern="^save_venting_")]
         },
