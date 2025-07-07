@@ -7,20 +7,26 @@ import json
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
 from collections import Counter
-from dotenv import load_dotenv
+from flask import Flask
+import threading
 
 # טעינת משתני סביבה
-load_dotenv()
+BOT_TOKEN = os.getenv('BOT_TOKEN', "7622868890:AAEnk_PC-hbOJIYWICXgE8F654RlOJxY5Sk")
 
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# טוקן הבוט ממשתה הסביבה
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+# יצירת שרת Flask לRender
+app = Flask(__name__)
 
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN לא נמצא! בדוק את משתני הסביבה.")
+@app.route('/')
+def hello():
+    return "🤖 בוט החרדה פועל! Bot is running!"
+
+@app.route('/health')
+def health():
+    return "OK"
 
 # הגדרת בסיס הנתונים
 def init_database():
@@ -269,6 +275,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await save_venting(query, context, True)
     elif data == "save_venting_no":
         await save_venting(query, context, False)
+    
+    elif data == "main_menu":
+        await query.edit_message_text(
+            "בחר אפשרות מהתפריט:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 תפריט ראשי", callback_data="back_to_main")]])
+        )
 
 async def complete_quick_report(query, context):
     """השלמת דיווח מהיר"""
@@ -485,7 +497,7 @@ async def show_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
     
     if not reports:
-        await update.message.reply_text("עדיין אין נתונים לניתוח. התחל לדווח כדי לראות דפוסים!")
+        await update.message.reply_text("עדיין אין נתונים לניתוח. התחל לדווח כדי לראות דפוסים!", reply_markup=get_main_keyboard())
         return
     
     # יצירת ניתוח טקסטואלי פשוט
@@ -537,9 +549,10 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 • התקשר לחבר
 
 📞 עזרה מקצועית:
-• קו החירום הלאומי: 1201
-• עזרה ראשונה נפשית: *6363
-• קו הסיוע של נט"ל: 1800-363-363
+• ער"ן - עזרה רגשית ונפשית: 1201
+  💬 צ'אט: https://www.eran.org.il/online-emotional-help/
+• סה"ר - סיוע והקשבה: 1800-120-140
+  💬 צ'אט 24/7: https://sahar.org.il/help/
 
 ⚠️ זכור: הבוט הזה לא מחליף טיפול מקצועי!
 """
@@ -565,8 +578,8 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     """לוג שגיאות"""
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
-def main():
-    """פונקציה ראשית"""
+def run_telegram_bot():
+    """פונקציה להפעלת בוט הטלגרם"""
     try:
         # יצירת בסיס נתונים
         init_database()
@@ -582,25 +595,26 @@ def main():
         # הוספת error handler
         application.add_error_handler(error_handler)
         
+        logger.info("🤖 בוט הטלגרם מתחיל לרוץ...")
+        
         # הרצת הבוט
-        logger.info("🤖 הבוט מתחיל לרוץ...")
-        
-        # הגדרת פורט עבור Render
-        port = int(os.environ.get('PORT', 8000))
-        
-        # הרצה עם webhook או polling
-        if os.environ.get('WEBHOOK_URL'):
-            application.run_webhook(
-                listen="0.0.0.0",
-                port=port,
-                webhook_url=os.environ.get('WEBHOOK_URL')
-            )
-        else:
-            application.run_polling()
+        application.run_polling()
             
     except Exception as e:
         logger.error(f"שגיאה בהפעלת הבוט: {e}")
         raise
+
+def main():
+    """פונקציה ראשית"""
+    # הפעלת בוט הטלגרם ברקע
+    bot_thread = threading.Thread(target=run_telegram_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+    
+    # הפעלת שרת Flask
+    port = int(os.environ.get('PORT', 8000))
+    logger.info(f"🌐 שרת Flask מתחיל על פורט {port}")
+    app.run(host='0.0.0.0', port=port, debug=False)
 
 if __name__ == '__main__':
     main()
