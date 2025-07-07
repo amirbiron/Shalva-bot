@@ -1,7 +1,6 @@
 import logging
 import sqlite3
 import os
-import io
 from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
@@ -12,7 +11,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # טוקן הבוט
-BOT_TOKEN = os.getenv('BOT_TOKEN', "7622868890:AAEnk_PC-hbOJIYWICXgE8F654RlOJxY5Sk")
+BOT_TOKEN = os.getenv('BOT_TOKEN') or "7622868890:AAEnk_PC-hbOJIYWICXgE8F654RlOJxY5Sk"
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN לא נמצא!")
@@ -220,7 +219,7 @@ async def handle_conversation_state(update: Update, context: ContextTypes.DEFAUL
         user_states[user_id] = "quick_anxiety_level"
         
         await update.message.reply_text(
-            "באיזה רמת חרדה? (1-10)",
+            "באיזה רמת חרדה? (שלב 2/4)",
             reply_markup=get_anxiety_level_keyboard()
         )
     
@@ -229,7 +228,7 @@ async def handle_conversation_state(update: Update, context: ContextTypes.DEFAUL
         user_states[user_id] = "full_anxiety_level"
         
         await update.message.reply_text(
-            "באיזה רמת חרדה? (שלב 2/4)",
+            "באיזה רמת חרדה? (1-10)",
             reply_markup=get_anxiety_level_keyboard()
         )
     
@@ -508,7 +507,7 @@ def analyze_user_patterns(user_id):
     FROM anxiety_reports 
     WHERE user_id = ? AND timestamp > ?
     ORDER BY timestamp DESC
-    ''', (user_id, two_weeks_ago.strftime('%Y-%m-%d %H:%M:%S')))
+    ''', (user_id, two_weeks_ago))
     
     reports = cursor.fetchall()
     conn.close()
@@ -531,6 +530,85 @@ def get_personalized_recommendation(user_id, current_data):
         return base_recommendation + "\n\nכיוון שזה בעבודה, נסה לקחת הפסקה קצרה או לצאת לאוויר צח."
     
     return base_recommendation
+
+async def show_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """הצגת גרפים וניתוחים"""
+    user_id = update.effective_user.id
+    
+    conn = sqlite3.connect('anxiety_data.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+    SELECT anxiety_level, timestamp, location, people_around 
+    FROM anxiety_reports 
+    WHERE user_id = ? 
+    ORDER BY timestamp DESC LIMIT 30
+    ''', (user_id,))
+    
+    reports = cursor.fetchall()
+    conn.close()
+    
+    if not reports:
+        await update.message.reply_text("עדיין אין נתונים לניתוח. התחל לדווח כדי לראות דפוסים!", reply_markup=get_main_keyboard())
+        return
+    
+    # יצירת ניתוח טקסטואלי פשוט
+    anxiety_levels = [report[0] for report in reports]
+    avg_anxiety = sum(anxiety_levels) / len(anxiety_levels)
+    max_anxiety = max(anxiety_levels)
+    min_anxiety = min(anxiety_levels)
+    
+    locations = [report[2] for report in reports if report[2]]
+    location_counter = Counter(locations)
+    
+    analysis_text = f"""
+📈 הניתוח שלך (30 הדיווחים האחרונים):
+
+📊 סטטיסטיקות:
+• ממוצע חרדה: {avg_anxiety:.1f}/10
+• חרדה מקסימלית: {max_anxiety}/10
+• חרדה מינימלית: {min_anxiety}/10
+• סה"כ דיווחים: {len(reports)}
+
+📍 מיקומים בעייתיים:
+"""
+    
+    for location, count in location_counter.most_common(3):
+        percentage = (count / len(locations)) * 100 if locations else 0
+        analysis_text += f"• {location}: {count} פעמים ({percentage:.1f}%)\n"
+    
+    analysis_text += "\n💡 לקבלת המלצות מותאמות, המשך לדווח על אירועי חרדה."
+    
+    await update.message.reply_text(analysis_text, reply_markup=get_main_keyboard())
+
+async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """הצגת עזרה כללית"""
+    help_text = """
+💡 עזרה כללית בהתמודדות עם חרדה:
+
+🫁 טכניקות נשימה:
+• נשימה 4-4-6: שאף 4 שניות, עצור 4, נשוף 6
+• נשימה עמוקה מהבטן (לא מהחזה)
+
+🧘‍♂️ טכניקות הרגעה:
+• 5-4-3-2-1: מצא 5 דברים שאתה רואה, 4 שאתה שומע, 3 שאתה מרגיש, 2 שאתה מריח, 1 שאתה טועם
+• הזכר לעצמך: "זה רגש, לא עובדה. זה יעבור"
+
+💪 פעולות מיידיות:
+• קום וזוז - תזוזה משחררת מתח
+• שתה מים קרים
+• שטוף פנים במים קרים
+• התקשר לחבר
+
+📞 עזרה מקצועית:
+• ער"ן - עזרה רגשית ונפשית: 1201
+  💬 צ'אט: https://www.eran.org.il/online-emotional-help/
+• סה"ר - סיוע והקשבה: 1800-120-140
+  💬 צ'אט 24/7: https://sahar.org.il/help/
+
+⚠️ זכור: הבוט הזה לא מחליף טיפול מקצועי!
+"""
+    
+    await update.message.reply_text(help_text, reply_markup=get_main_keyboard())
 
 async def show_relaxing_music_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """הצגת שירים מרגיעים מהתפריט הראשי"""
@@ -662,7 +740,7 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def show_settings_inline(query, context):
-    """הצגת תפריט הגדרות בתוך callback"""
+    """הצגת תפריט הגדרות בinline"""
     keyboard = [
         [InlineKeyboardButton("🔔 הגדרות תזכורות", callback_data="settings_reminders")],
         [InlineKeyboardButton("⚡ סוג דיווח מועדף", callback_data="settings_report_type")],
@@ -820,7 +898,7 @@ async def update_reminder_setting(query, context, enabled):
     conn.commit()
     conn.close()
     
-    status = "הופעלו" if enabled else "כובו"
+    status = "הופעלו" if enabled else "בוטלו"
     await query.edit_message_text(
         f"✅ תזכורות {status} בהצלחה!",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 חזור להגדרות", callback_data="back_to_settings")]])
@@ -838,7 +916,7 @@ async def update_report_type(query, context, report_type):
     
     type_desc = "מהיר" if report_type == "quick" else "מלא"
     await query.edit_message_text(
-        f"✅ סוג דיווח מועדף הוגדר ל: {type_desc}",
+        f"✅ סוג דיווח מועדף עודכן ל: {type_desc}",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 חזור להגדרות", callback_data="back_to_settings")]])
     )
 
@@ -849,8 +927,11 @@ async def confirm_reset_data(query, context):
     try:
         conn = sqlite3.connect('anxiety_data.db')
         cursor = conn.cursor()
+        
+        # מחיקת כל הנתונים של המשתמש
         cursor.execute("DELETE FROM anxiety_reports WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM free_venting WHERE user_id = ?", (user_id,))
+        
         conn.commit()
         conn.close()
         
@@ -926,4 +1007,206 @@ async def show_relaxing_music(query, context):
 
 🎼 "Strawberry Swing" - Coldplay
 🎧 יוטיוב: https://youtu.be/h3pJZSTQqIg
-🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v
+🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh
+
+🎼 "Watermark" - Enya
+🎧 יוטיוב: https://youtu.be/bPCdsa7hS7M
+🎶 ספוטיפיי: https://open.spotify.com/track/4vOQ55pOMyE6bQJJzm3kei
+
+🎼 "Weightless" - Marconi Union
+🎧 יוטיוב: https://youtu.be/UfcAVejslrU
+🎶 ספוטיפיי: https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6
+
+💡 מומלץ להאזין עם אוזניות בעוצמה נמוכה-בינונית
+🧘‍♂️ נסה לנשום עמוק בזמן ההאזנה
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("🚀 בוא נתחיל עכשיו", callback_data="start_using")],
+        [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
+    ]
+    
+    await query.edit_message_text(music_text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """הצגת תפריט הגדרות פועל"""
+    keyboard = [
+        [InlineKeyboardButton("🔔 הגדרות תזכורות", callback_data="settings_reminders")],
+        [InlineKeyboardButton("⚡ סוג דיווח מועדף", callback_data="settings_report_type")],
+        [InlineKeyboardButton("📊 ייצוא נתונים", callback_data="settings_export")],
+        [InlineKeyboardButton("🗑️ איפוס נתונים", callback_data="settings_reset")]
+    ]
+    
+    await update.message.reply_text(
+        "⚙️ הגדרות:\n\nבחר מה תרצה לשנות:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def handle_reminder_settings(query, context):
+    """הגדרות תזכורות"""
+    user_id = query.from_user.id
+    
+    # קריאת הגדרות נוכחיות
+    conn = sqlite3.connect('anxiety_data.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT daily_reminder, reminder_time FROM user_settings WHERE user_id = ?", (user_id,))
+    settings = cursor.fetchone()
+    conn.close()
+    
+    current_status = "מופעלות" if settings[0] else "כבויות"
+    current_time = settings[1] if settings[0] else "20:00"
+    
+    keyboard = [
+        [InlineKeyboardButton("🔔 הפעל תזכורות", callback_data="reminder_on")],
+        [InlineKeyboardButton("🔕 כבה תזכורות", callback_data="reminder_off")],
+        [InlineKeyboardButton("⏰ שנה שעת תזכורת", callback_data="reminder_time")],
+        [InlineKeyboardButton("🏠 חזור להגדרות", callback_data="back_to_settings")]
+    ]
+    
+    await query.edit_message_text(
+        f"🔔 הגדרות תזכורות:\n\nסטטוס נוכחי: {current_status}\nשעת תזכורת: {current_time}\n\nמה תרצה לשנות?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def handle_report_type_settings(query, context):
+    """הגדרות סוג דיווח מועדף"""
+    user_id = query.from_user.id
+    
+    # קריאת הגדרה נוכחית
+    conn = sqlite3.connect('anxiety_data.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT preferred_report_type FROM user_settings WHERE user_id = ?", (user_id,))
+    current_type = cursor.fetchone()[0]
+    conn.close()
+    
+    current_desc = "מהיר" if current_type == "quick" else "מלא"
+    
+    keyboard = [
+        [InlineKeyboardButton("⚡ דיווח מהיר", callback_data="report_type_quick")],
+        [InlineKeyboardButton("🔍 דיווח מלא", callback_data="report_type_full")],
+        [InlineKeyboardButton("🏠 חזור להגדרות", callback_data="back_to_settings")]
+    ]
+    
+    await query.edit_message_text(
+        f"⚡ סוג דיווח מועדף:\n\nנוכחי: {current_desc}\n\nאיזה סוג דיווח תעדיף כברירת מחדל?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def handle_export_data(query, context):
+    """ייצוא נתונים"""
+    user_id = query.from_user.id
+    
+    try:
+        # קריאת כל הנתונים
+        conn = sqlite3.connect('anxiety_data.db')
+        cursor = conn.cursor()
+        
+        # דיווחי חרדה
+        cursor.execute('''
+        SELECT timestamp, anxiety_level, description, location, people_around, weather, report_type
+        FROM anxiety_reports WHERE user_id = ? ORDER BY timestamp DESC
+        ''', (user_id,))
+        reports = cursor.fetchall()
+        
+        # פריקות חופשיות
+        cursor.execute('''
+        SELECT timestamp, content FROM free_venting 
+        WHERE user_id = ? AND save_for_analysis = 1 ORDER BY timestamp DESC
+        ''', (user_id,))
+        ventings = cursor.fetchall()
+        
+        conn.close()
+        
+        if not reports and not ventings:
+            await query.edit_message_text(
+                "📊 אין נתונים לייצוא עדיין.\n\nהתחל לדווח כדי שיהיו נתונים לייצא!",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 חזור להגדרות", callback_data="back_to_settings")]])
+            )
+            return
+        
+        # יצירת קובץ טקסט
+        export_text = f"📊 ייצוא נתונים - {datetime.now().strftime('%d/%m/%Y')}\n\n"
+        
+        if reports:
+            export_text += "📈 דיווחי חרדה:\n" + "="*30 + "\n"
+            for report in reports:
+                export_text += f"תאריך: {report[0]}\n"
+                export_text += f"רמת חרדה: {report[1]}/10\n"
+                export_text += f"תיאור: {report[2]}\n"
+                if report[3]: export_text += f"מיקום: {report[3]}\n"
+                if report[4]: export_text += f"אנשים: {report[4]}\n"
+                if report[5]: export_text += f"מזג אוויר: {report[5]}\n"
+                export_text += f"סוג: {report[6]}\n\n"
+        
+        if ventings:
+            export_text += "🗣️ פריקות שנשמרו:\n" + "="*30 + "\n"
+            for venting in ventings:
+                export_text += f"תאריך: {venting[0]}\n"
+                export_text += f"תוכן: {venting[1]}\n\n"
+        
+        # שליחת הקובץ
+        import io
+        file_buffer = io.BytesIO(export_text.encode('utf-8'))
+        file_buffer.name = f"anxiety_data_{datetime.now().strftime('%Y%m%d')}.txt"
+        
+        await context.bot.send_document(
+            chat_id=query.message.chat_id,
+            document=file_buffer,
+            filename=f"נתוני_חרדה_{datetime.now().strftime('%d_%m_%Y')}.txt",
+            caption="✅ הנתונים שלך יוצאו בהצלחה!\n\n🔒 זכור: זה מידע רגיש, שמור במקום בטוח."
+        )
+        
+        await query.edit_message_text(
+            "✅ הנתונים נשלחו אליך כקובץ!",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 חזור להגדרות", callback_data="back_to_settings")]])
+        )
+        
+    except Exception as e:
+        await query.edit_message_text(
+            "❌ שגיאה בייצוא הנתונים. נסה שוב מאוחר יותר.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 חזור להגדרות", callback_data="back_to_settings")]])
+        )
+
+async def handle_reset_data(query, context):
+    """איפוס נתונים"""
+    keyboard = [
+        [InlineKeyboardButton("⚠️ כן, מחק הכל", callback_data="confirm_reset")],
+        [InlineKeyboardButton("❌ ביטול", callback_data="back_to_settings")]
+    ]
+    
+    await query.edit_message_text(
+        "🗑️ איפוס נתונים:\n\n⚠️ פעולה זו תמחק את כל הנתונים שלך:\n• כל דיווחי החרדה\n• כל הפריקות\n• ההיסטוריה והגרפים\n\nהאם אתה בטוח?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """לוג שגיאות"""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+def main():
+    """פונקציה ראשית"""
+    try:
+        # יצירת בסיס נתונים
+        init_database()
+        
+        # יצירת האפליקציה
+        application = Application.builder().token(BOT_TOKEN).build()
+        
+        # הוספת handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_handler(CallbackQueryHandler(handle_callback_query))
+        
+        # הוספת error handler
+        application.add_error_handler(error_handler)
+        
+        # הרצת הבוט
+        logger.info("🤖 הבוט מתחיל לרוץ...")
+        application.run_polling()
+            
+    except Exception as e:
+        logger.error(f"שגיאה בהפעלת הבוט: {e}")
+        raise
+
+if __name__ == '__main__':
+    main()
