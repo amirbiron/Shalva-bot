@@ -623,7 +623,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             "⏰ שינוי שעת תזכורת\n\nתכונה זו תבוא בעדכון הבא.\nכרגע ברירת המחדל היא 20:00.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 חזור", callback_data="settings_reminders")]])
         )
-    elif data == "settings_menu" or data == "settings_reminders_back":
+    elif data == "settings_menu" or data == "show_settings_menu":
         await show_settings_menu_callback(query, context)
     elif data.startswith("report_type_"):
         await set_report_type(query, context)
@@ -1036,7 +1036,7 @@ async def show_reminder_settings(query, context):
         [InlineKeyboardButton(f"🔔 {'השבת' if settings[0] else 'הפעל'} תזכורות", 
                             callback_data="reminder_toggle")],
         [InlineKeyboardButton("⏰ שנה שעה", callback_data="reminder_time")],
-        [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="settings_menu")]
+        [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="show_settings_menu")]
     ]
     
     message = f"""
@@ -1054,21 +1054,23 @@ async def show_report_type_settings(query, context):
     """הגדרות סוג דיווח מועדף"""
     user_id = query.from_user.id
     
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT preferred_report_type FROM user_settings WHERE user_id = ?", (user_id,))
-    current_type = cursor.fetchone()[0]
-    conn.close()
-    
-    keyboard = [
-        [InlineKeyboardButton(f"⚡ דיווח מהיר {'✓' if current_type == 'quick' else ''}", 
-                            callback_data="report_type_quick")],
-        [InlineKeyboardButton(f"🔍 דיווח מלא {'✓' if current_type == 'full' else ''}", 
-                            callback_data="report_type_full")],
-        [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="settings_menu")]
-    ]
-    
-    message = f"""
+    try:
+        conn = sqlite3.connect('anxiety_data.db')
+        cursor = conn.cursor()
+        cursor.execute("SELECT preferred_report_type FROM user_settings WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        current_type = result[0] if result else 'quick'
+        conn.close()
+        
+        keyboard = [
+            [InlineKeyboardButton(f"⚡ דיווח מהיר {'✓' if current_type == 'quick' else ''}", 
+                                callback_data="report_type_quick")],
+            [InlineKeyboardButton(f"🔍 דיווח מלא {'✓' if current_type == 'full' else ''}", 
+                                callback_data="report_type_full")],
+            [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="show_settings_menu")]
+        ]
+        
+        message = f"""
 ⚡ סוג דיווח מועדף
 
 הגדרה נוכחית: {'דיווח מהיר' if current_type == 'quick' else 'דיווח מלא'}
@@ -1076,8 +1078,14 @@ async def show_report_type_settings(query, context):
 • דיווח מהיר: מהיר ופשוט, רק תיאור ורמת חרדה
 • דיווח מלא: מפורט עם פרטים על מיקום, אנשים ומזג אוויר
 """
-    
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+        
+    except Exception as e:
+        await query.edit_message_text(
+            "❌ שגיאה בטעינת ההגדרות. נסה שוב מאוחר יותר.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 חזור", callback_data="show_settings_menu")]])
+        )
 
 async def export_user_data(query, context):
     """ייצוא נתוני המשתמש"""
@@ -1280,7 +1288,7 @@ async def set_report_type(query, context):
 """
     
     keyboard = [
-        [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="settings_menu")],
+        [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="show_settings_menu")],
         [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
     ]
     
