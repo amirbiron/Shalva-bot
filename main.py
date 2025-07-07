@@ -76,7 +76,8 @@ def get_main_keyboard():
     keyboard = [
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
-        [KeyboardButton("💡 עזרה כללית"), KeyboardButton("⚙️ הגדרות")]
+        [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
+        [KeyboardButton("⚙️ הגדרות")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -118,21 +119,36 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
     
     welcome_message = """
-🤖 שלום! אני בוט לניתוח ומעקב אחר טריגרים של חרדה ודיכאון.
+🤗 שלום ויפה שהגעת! 
 
-💡 איך אני יכול לעזור:
-⚡ דיווח מהיר - לרגעים של חרדה חדה
-🔍 דיווח מלא - לניתוח מעמיק
-🗣️ פריקה חופשית - לכתיבה ללא שאלות
-📈 גרפים - לראות דפוסים
-💡 עזרה - טכניקות התמודדות
+אני כאן כדי לעזור לך להבין ולעקוב אחר הרגשות שלך בצורה בטוחה ופרטית. 
 
-🔒 הכל פרטי ובטוח. אתה שולט על הנתונים שלך.
+זה לא תמיד קל להתמודד עם חרדה ודיכאון, ואני רוצה להיות הכלי שיעזור לך לראות דפוסים ולמצוא דרכים טובות יותר להרגיש.
 
-בחר אפשרות מהתפריט למטה:
+💙 איך אני יכול לתמוך בך:
+⚡ דיווח מהיר - כשאתה מרגיש חרדה עכשיו
+🔍 דיווח מפורט - לזהות מה מעורר את הרגשות
+🗣️ פריקה חופשית - מקום בטוח לכתוב מה שמטריד
+📈 מבט על הדרך - לראות איך אתה מתקדם
+💡 כלים לעזרה - טכניקות שיכולות להרגיע
+
+🔒 הכל נשאר רק אצלך ופרטי לחלוטין.
+
+קח את הזמן שלך, ובחר מה מתאים לך עכשיו:
 """
     
     await update.message.reply_text(welcome_message, reply_markup=get_main_keyboard())
+    
+    # הצעה למוזיקה מרגיעה
+    music_keyboard = [
+        [InlineKeyboardButton("🎵 כן, אשמח לשיר מרגיע", callback_data="relaxing_music")],
+        [InlineKeyboardButton("▶️ בוא נתחיל", callback_data="start_using")]
+    ]
+    
+    await update.message.reply_text(
+        "🎶 רוצה להתחיל עם שיר מרגיע? יש לי קולקציה של שירים שנמצאו מחקרית הכי מרגיעים במצבי סטרס:",
+        reply_markup=InlineKeyboardMarkup(music_keyboard)
+    )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בהודעות טקסט"""
@@ -147,6 +163,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start_free_venting(update, context)
     elif text == "📈 גרפים והיסטוריה":
         await show_analytics(update, context)
+    elif text == "🎵 שירים מרגיעים":
+        await show_relaxing_music_message(update, context)
     elif text == "💡 עזרה כללית":
         await show_help(update, context)
     elif text == "⚙️ הגדרות":
@@ -268,6 +286,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(
             "בחר אפשרות מהתפריט:",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 תפריט ראשי", callback_data="back_to_main")]])
+        )
+    
+    elif data == "relaxing_music":
+        await show_relaxing_music(query, context)
+    elif data == "start_using":
+        await query.edit_message_text(
+            "מעולה! אני כאן בשבילך. בחר מה מתאים לך עכשיו:",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🏠 לתפריט הראשי", callback_data="back_to_main")]])
         )
 
 async def complete_quick_report(query, context):
@@ -546,6 +572,73 @@ async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     
     await update.message.reply_text(help_text, reply_markup=get_main_keyboard())
+
+async def show_relaxing_music_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """הצגת שירים מרגיעים מהתפריט הראשי"""
+    music_text = """
+🎵 שירים מרגיעים (מוכחים מחקרית לירידה בסטרס):
+
+🎼 "Someone Like You" - Adele
+🎧 יוטיוב: https://youtu.be/hLQl3WQQoQ0
+🎶 ספוטיפיי: https://open.spotify.com/track/4gSMuI5TqvCKk0s0iY3I7I
+
+🎼 "Please Don't Go" - Barcelona  
+🎧 יוטיוב: https://youtu.be/-kizV91zQ_0
+🎶 ספוטיפיי: https://open.spotify.com/track/0lRnbYaPtv0A5OezVahO8e
+
+🎼 "Strawberry Swing" - Coldplay
+🎧 יוטיוב: https://youtu.be/h3pJZSTQqIg
+🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh
+
+🎼 "Watermark" - Enya
+🎧 יוטיוב: https://youtu.be/bPCdsa7hS7M
+🎶 ספוטיפיי: https://open.spotify.com/track/4vOQ55pOMyE6bQJJzm3kei
+
+🎼 "Weightless" - Marconi Union
+🎧 יוטיוב: https://youtu.be/UfcAVejslrU
+🎶 ספוטיפיי: https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6
+
+💡 מומלץ להאזין עם אוזניות בעוצמה נמוכה-בינונית
+🧘‍♂️ נסה לנשום עמוק בזמן ההאזנה
+"""
+    
+    await update.message.reply_text(music_text, reply_markup=get_main_keyboard())
+
+async def show_relaxing_music(query, context):
+    """הצגת רשימת שירים מרגיעים"""
+    music_text = """
+🎵 שירים מרגיעים (מוכחים מחקרית לירידה בסטרס):
+
+🎼 "Someone Like You" - Adele
+🎧 יוטיוב: https://youtu.be/hLQl3WQQoQ0
+🎶 ספוטיפיי: https://open.spotify.com/track/4gSMuI5TqvCKk0s0iY3I7I
+
+🎼 "Please Don't Go" - Barcelona  
+🎧 יוטיוב: https://youtu.be/-kizV91zQ_0
+🎶 ספוטיפיי: https://open.spotify.com/track/0lRnbYaPtv0A5OezVahO8e
+
+🎼 "Strawberry Swing" - Coldplay
+🎧 יוטיוב: https://youtu.be/h3pJZSTQqIg
+🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh
+
+🎼 "Watermark" - Enya
+🎧 יוטיוב: https://youtu.be/bPCdsa7hS7M
+🎶 ספוטיפיי: https://open.spotify.com/track/4vOQ55pOMyE6bQJJzm3kei
+
+🎼 "Weightless" - Marconi Union
+🎧 יוטיוב: https://youtu.be/UfcAVejslrU
+🎶 ספוטיפיי: https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6
+
+💡 מומלץ להאזין עם אוזניות בעוצמה נמוכה-בינונית
+🧘‍♂️ נסה לנשום עמוק בזמן ההאזנה
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("▶️ בוא נתחיל עכשיו", callback_data="start_using")],
+        [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
+    ]
+    
+    await query.edit_message_text(music_text, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """הצגת הגדרות"""
