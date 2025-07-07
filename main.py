@@ -173,6 +173,7 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
     """טיפול בהודעות כלליות שלא במסגרת שיחה"""
     text = update.message.text
     
+    # טיפול בכפתורי התפריט הראשי - תמיד פעילים
     if text == "📈 גרפים והיסטוריה":
         await show_analytics(update, context)
     elif text == "🎵 שירים מרגיעים":
@@ -181,6 +182,21 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
         await show_help(update, context)
     elif text == "⚙️ הגדרות":
         await show_settings_menu(update, context)
+    elif text == "⚡ דיווח מהיר":
+        await update.message.reply_text(
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מהיר.",
+            reply_markup=get_main_keyboard()
+        )
+    elif text == "🔍 דיווח מלא":
+        await update.message.reply_text(
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מלא.",
+            reply_markup=get_main_keyboard()
+        )
+    elif text == "🗣️ פריקה חופשית":
+        await update.message.reply_text(
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל פריקה חופשית, לחץ על /start ואז בחר פריקה חופשית.",
+            reply_markup=get_main_keyboard()
+        )
     else:
         await update.message.reply_text(
             "בחר אפשרות מהתפריט למטה:",
@@ -1065,6 +1081,7 @@ async def export_user_data(query, context):
                     "timestamp": venting[0],
                     "content": venting[1]
                 }
+                for venting in ventings
             ],
             "statistics": {
                 "total_reports": len(anxiety_reports),
@@ -1094,9 +1111,13 @@ async def export_user_data(query, context):
         await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
         
         # שליחת הקובץ בהודעה נפרדת
+        import io
+        file_buffer = io.BytesIO(json_data.encode('utf-8'))
+        file_buffer.name = f"anxiety_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
         await context.bot.send_document(
             chat_id=query.message.chat_id,
-            document=json_data.encode('utf-8'),
+            document=file_buffer,
             filename=f"anxiety_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
             caption="📁 הנתונים שלך - שמור במקום בטוח!"
         )
@@ -1213,7 +1234,7 @@ async def set_report_type(query, context):
     message = f"""
 ✅ סוג הדיווח המועדף הוגדר ל{type_text}!
 
-🎯 בדיווחים הבאים המערכת תציע לך ראשית את סוג הדיווח שבחרת.
+🎯 ההגדרה נשמרה בהצלחה. תוכל לשנות את זה בכל עת דרך הגדרות.
 """
     
     keyboard = [
