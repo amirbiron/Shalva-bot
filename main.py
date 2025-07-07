@@ -310,9 +310,17 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif data == "save_venting_no":
         await save_venting(query, context, False)
     
-    # הגדרות חדשות
     elif data.startswith("settings_"):
         await handle_settings_callback(query, context)
+    elif data == "reminder_toggle":
+        await toggle_reminders(query, context)
+    elif data == "reminder_time":
+        await query.edit_message_text(
+            "⏰ שינוי שעת תזכורת\n\nתכונה זו תבוא בעדכון הבא.\nכרגע ברירת המחדל היא 20:00.",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 חזור", callback_data="settings_reminders")]])
+        )
+    elif data == "settings_menu":
+        await show_settings_menu_callback(query, context)
     
     elif data == "main_menu":
         await query.edit_message_text(
@@ -516,6 +524,31 @@ async def handle_settings_callback(query, context):
         await export_user_data(query, context)
     elif data == "settings_reset":
         await confirm_reset_data(query, context)
+    """הצגת תפריט הגדרות מכפתור callback"""
+    keyboard = [
+        [InlineKeyboardButton("🔔 הגדרות תזכורות", callback_data="settings_reminders")],
+        [InlineKeyboardButton("⚡ סוג דיווח מועדף", callback_data="settings_report_type")],
+        [InlineKeyboardButton("📊 ייצוא נתונים", callback_data="settings_export")],
+        [InlineKeyboardButton("🗑️ איפוס נתונים", callback_data="settings_reset")],
+        [InlineKeyboardButton("🏠 חזור לתפריט", callback_data="main_menu")]
+    ]
+    
+    await query.edit_message_text(
+        "⚙️ הגדרות\n\nבחר מה תרצה לשנות:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    """טיפול בהגדרות"""
+    user_id = query.from_user.id
+    data = query.data
+    
+    if data == "settings_reminders":
+        await show_reminder_settings(query, context)
+    elif data == "settings_report_type":
+        await show_report_type_settings(query, context)
+    elif data == "settings_export":
+        await export_user_data(query, context)
+    elif data == "settings_reset":
+        await confirm_reset_data(query, context)
     elif data.startswith("reminder_"):
         await toggle_reminders(query, context)
     elif data.startswith("report_type_"):
@@ -538,7 +571,7 @@ async def show_reminder_settings(query, context):
     
     keyboard = [
         [InlineKeyboardButton(f"🔔 {'השבת' if settings[0] else 'הפעל'} תזכורות", 
-                            callback_data=f"reminder_toggle")],
+                            callback_data="reminder_toggle")],
         [InlineKeyboardButton("⏰ שנה שעה", callback_data="reminder_time")],
         [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="settings_menu")]
     ]
@@ -651,7 +684,6 @@ async def export_user_data(query, context):
 """
         
         keyboard = [
-            [InlineKeyboardButton("📥 הורד קובץ", callback_data="download_data")],
             [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="settings_menu")]
         ]
         
@@ -986,28 +1018,28 @@ async def show_relaxing_music_message(update: Update, context: ContextTypes.DEFA
 
 🎼 "Weightless" - Marconi Union
 🎧 יוטיוב: https://youtu.be/UfcAVejslrU
-🎶 ספוטיפיי: spotify:track:6j2P7MoSNEDE9BwT4CGBFA
-⭐ השיר הכי מרגיע בעולם לפי מחקרים!
+🎶 ספוטיפיי: https://open.spotify.com/track/6j2P7MoSNEDE9BwT4CGBFA
+⭐ מחקר של המכון הבריטי לטכנולוגיית קול קבע שזה השיר הכי מרגיע!
 
 🎼 "Someone Like You" - Adele
 🎧 יוטיוב: https://youtu.be/hLQl3WQQoQ0
-🎶 ספוטיפיי: spotify:track:4gSMuI5TqvCKk0s0iY3I7I
+🎶 ספוטיפיי: https://open.spotify.com/track/4ErraYS3SSoBYF0A7cWk6H
 
 🎼 "Watermark" - Enya
 🎧 יוטיוב: https://youtu.be/0IKvdaXZP8Q
-🎶 ספוטיפיי: spotify:track:4vOQ55pOMyE6bQJJzm3kei
+🎶 ספוטיפיי: https://open.spotify.com/track/0CBpxAa95ZvdH1D9K7cFem
 
 🎼 "Strawberry Swing" - Coldplay
 🎧 יוטיוב: https://youtu.be/h3pJZSTQqIg
-🎶 ספוטיפיי: spotify:track:0zVYSaFo1b2v8YDmx0QYEh
+🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh
 
 🎼 "Claire de Lune" - Claude Debussy
 🎧 יוטיוב: https://youtu.be/CvFH_6DNRCY
-🎶 קלאסיקה מרגיעה במיוחד
+🎶 ספוטיפיי: https://open.spotify.com/track/1B5wH8g8aKblRZZjcPWPFW
 
 🎼 "Aqueous Transmission" - Incubus
 🎧 יוטיוב: https://youtu.be/_ndHqJ3RP5Y
-🎶 מוזיקה אינסטרומנטלית ארוכה ומרגיעה
+🎶 ספוטיפיי: https://open.spotify.com/track/4tH42gLZMpFfkPdMCqlCE3
 
 💡 טיפים להאזנה מרגיעה:
 • האזן עם אוזניות בעוצמה נמוכה-בינונית
@@ -1025,26 +1057,30 @@ async def show_relaxing_music(query, context):
 
 🎼 "Weightless" - Marconi Union
 🎧 יוטיוב: https://youtu.be/UfcAVejslrU
-⭐ השיר הכי מרגיע בעולם לפי מחקרים!
+🎶 ספוטיפיי: https://open.spotify.com/track/6j2P7MoSNEDE9BwT4CGBFA
+⭐ מחקר של המכון הבריטי לטכנולוגיית קול קבע שזה השיר הכי מרגיע!
 
 🎼 "Someone Like You" - Adele  
 🎧 יוטיוב: https://youtu.be/hLQl3WQQoQ0
+🎶 ספוטיפיי: https://open.spotify.com/track/4ErraYS3SSoBYF0A7cWk6H
 
 🎼 "Watermark" - Enya
 🎧 יוטיוב: https://youtu.be/0IKvdaXZP8Q
+🎶 ספוטיפיי: https://open.spotify.com/track/0CBpxAa95ZvdH1D9K7cFem
 
 🎼 "Strawberry Swing" - Coldplay
 🎧 יוטיוב: https://youtu.be/h3pJZSTQqIg
+🎶 ספוטיפיי: https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh
 
 🎼 "Claire de Lune" - Claude Debussy
 🎧 יוטיוב: https://youtu.be/CvFH_6DNRCY
+🎶 ספוטיפיי: https://open.spotify.com/track/1B5wH8g8aKblRZZjcPWPFW
 
 💡 מומלץ להאזין עם אוזניות בעוצמה נמוכה-בינונית
 🧘‍♂️ נסה לנשום עמוק בזמן ההאזנה - זה יעזור להרגעה
 """
     
     keyboard = [
-        [InlineKeyboardButton("💡 עזרה נוספת", callback_data="show_help")],
         [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
     ]
     
