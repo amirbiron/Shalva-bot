@@ -121,6 +121,30 @@ def get_progress_indicator(current_step, total_steps):
     return f"{filled}{empty} ({current_step}/{total_steps})"
 
 # =================================================================
+# טיפול בתפריט במהלך שיחות
+# =================================================================
+
+async def handle_menu_during_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """טיפול בלחיצות על תפריט במהלך שיחה פעילה"""
+    text = update.message.text
+    
+    # ניקוי הנתונים הזמניים
+    context.user_data.clear()
+    
+    # הפניה לפונקציה המתאימה
+    if text == "📈 גרפים והיסטוריה":
+        await show_analytics(update, context)
+    elif text == "🎵 שירים מרגיעים":
+        await show_relaxing_music_message(update, context)
+    elif text == "💡 עזרה כללית":
+        await show_help(update, context)
+    elif text == "⚙️ הגדרות":
+        await show_settings_menu(update, context)
+    
+    # יציאה מהשיחה
+    return ConversationHandler.END
+
+# =================================================================
 # START וההודעות הכלליות
 # =================================================================
 
@@ -506,7 +530,13 @@ def create_quick_report_conversation():
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^⚡ דיווח מהיר$"), start_quick_report)],
         states={
-            QUICK_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_quick_description)],
+            QUICK_DESC: [
+                MessageHandler(filters.Regex("^📈 גרפים והיסטוריה$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_quick_description)
+            ],
             QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^anxiety_")]
         },
         fallbacks=[
@@ -520,7 +550,13 @@ def create_full_report_conversation():
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🔍 דיווח מלא$"), start_full_report)],
         states={
-            FULL_DESC: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_full_description)],
+            FULL_DESC: [
+                MessageHandler(filters.Regex("^📈 גרפים והיסטוריה$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_full_description)
+            ],
             FULL_ANXIETY: [CallbackQueryHandler(get_full_anxiety_level, pattern="^anxiety_")],
             FULL_LOCATION: [CallbackQueryHandler(get_full_location, pattern="^location_")],
             FULL_PEOPLE: [CallbackQueryHandler(get_full_people, pattern="^people_")],
@@ -537,7 +573,13 @@ def create_venting_conversation():
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🗣️ פריקה חופשית$"), start_free_venting)],
         states={
-            FREE_VENTING: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_venting_content)],
+            FREE_VENTING: [
+                MessageHandler(filters.Regex("^📈 גרפים והיסטוריה$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
+                MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, get_venting_content)
+            ],
             VENTING_SAVE: [CallbackQueryHandler(save_venting_choice, pattern="^save_venting_")]
         },
         fallbacks=[
@@ -581,7 +623,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             "⏰ שינוי שעת תזכורת\n\nתכונה זו תבוא בעדכון הבא.\nכרגע ברירת המחדל היא 20:00.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 חזור", callback_data="settings_reminders")]])
         )
-    elif data == "settings_menu":
+    elif data == "settings_menu" or data == "settings_reminders_back":
         await show_settings_menu_callback(query, context)
     elif data.startswith("report_type_"):
         await set_report_type(query, context)
