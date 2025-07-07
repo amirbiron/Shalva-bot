@@ -1,22 +1,26 @@
 import logging
 import sqlite3
 import asyncio
+import os
 from datetime import datetime, timedelta
 import json
-import requests
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler
-import matplotlib.pyplot as plt
-import io
-import base64
-from collections import Counter, defaultdict
+from collections import Counter
+from dotenv import load_dotenv
+
+# טעינת משתני סביבה
+load_dotenv()
 
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# טוקן הבוט - החלף בטוקן שלך מ-@BotFather
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+# טוקן הבוט ממשתה הסביבה
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN לא נמצא! בדוק את משתני הסביבה.")
 
 # הגדרת בסיס הנתונים
 def init_database():
@@ -73,23 +77,6 @@ LOCATION_OPTIONS = ['🏠 בית', '🏢 עבודה', '🚗 רחוב', '🛒 ק�
 PEOPLE_OPTIONS = ['👤 לבד', '👥 עם חברים', '👔 קולגות', '👨‍👩‍👧‍👦 משפחה', '👥 זרים', '👥 אחר']
 WEATHER_OPTIONS = ['☀️ שמש', '🌧️ גשם', '☁️ מעונן', '🔥 חם', '❄️ קר', '🌤️ אחר']
 
-# הודעות עידוד
-ENCOURAGEMENT_MESSAGES = [
-    "🌟 אתה חזק יותר ממה שאתה חושב",
-    "💪 כל יום חדש הוא הזדמנות חדשה", 
-    "🌈 הרגשות הקשים עוברים, אתה לא לבד",
-    "🤗 אתה שווה אהבה ותמיכה",
-    "🌱 צמיחה לוקחת זמן, תן לעצמך רחמים"
-]
-
-# טכניקות הרגעה
-RELAXATION_TECHNIQUES = [
-    "🫁 נשימה עמוקה: שאף באף 4 שניות, עצור 4 שניות, נשוף בפה 6 שניות",
-    "🧘‍♂️ טכניקת 5-4-3-2-1: מצא 5 דברים שאתה רואה, 4 שאתה שומע, 3 שאתה מרגיש, 2 שאתה מריח, 1 שאתה טועם",
-    "💭 הזכר לעצמך: 'זה רגש, לא עובדה. זה יעבור'",
-    "🚶‍♂️ קום וזוז קצת - תזוזה עוזרת לשחרר מתח"
-]
-
 def get_main_keyboard():
     """יצירת מקלדת ראשית"""
     keyboard = [
@@ -102,13 +89,18 @@ def get_main_keyboard():
 def get_anxiety_level_keyboard():
     """יצירת מקלדת לבחירת רמת חרדה"""
     keyboard = []
-    for i in range(1, 11):
-        if i <= 5:
-            keyboard.append([InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}")])
-        else:
-            if len(keyboard) == 5:
-                keyboard.append([])
-            keyboard[5 if i > 5 else i-1].append(InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}"))
+    row1 = []
+    row2 = []
+    
+    for i in range(1, 6):
+        row1.append(InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}"))
+    
+    for i in range(6, 11):
+        row2.append(InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}"))
+    
+    keyboard.append(row1)
+    keyboard.append(row2)
+    
     return InlineKeyboardMarkup(keyboard)
 
 def get_options_keyboard(options, callback_prefix):
@@ -272,6 +264,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         weather = data.replace("weather_", "")
         temp_data[user_id]["weather"] = weather
         await complete_full_report(query, context)
+    
+    elif data == "save_venting_yes":
+        await save_venting(query, context, True)
+    elif data == "save_venting_no":
+        await save_venting(query, context, False)
 
 async def complete_quick_report(query, context):
     """השלמת דיווח מהיר"""
@@ -304,10 +301,18 @@ async def complete_quick_report(query, context):
 """
     
     # ניקוי מצב
-    del user_states[user_id]
-    del temp_data[user_id]
+    if user_id in user_states:
+        del user_states[user_id]
+    if user_id in temp_data:
+        del temp_data[user_id]
     
-    await query.edit_message_text(message, reply_markup=get_main_keyboard())
+    keyboard = [
+        [InlineKeyboardButton("🔍 הוסף פרטים", callback_data="add_details")],
+        [InlineKeyboardButton("💡 עזרה כללית", callback_data="show_help")],
+        [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
+    ]
+    
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def continue_full_report(query, context):
     """המשך דיווח מלא"""
@@ -357,10 +362,17 @@ async def complete_full_report(query, context):
 """
     
     # ניקוי מצב
-    del user_states[user_id]
-    del temp_data[user_id]
+    if user_id in user_states:
+        del user_states[user_id]
+    if user_id in temp_data:
+        del temp_data[user_id]
     
-    await query.edit_message_text(message, reply_markup=get_main_keyboard())
+    keyboard = [
+        [InlineKeyboardButton("📈 ראה גרפים", callback_data="show_analytics")],
+        [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
+    ]
+    
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def handle_free_venting_complete(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
     """השלמת פריקה חופשית"""
@@ -379,6 +391,35 @@ async def handle_free_venting_complete(update: Update, context: ContextTypes.DEF
     # שמירה זמנית
     temp_data[user_id] = {"venting_content": text}
     user_states[user_id] = "venting_save_choice"
+
+async def save_venting(query, context, save_for_analysis):
+    """שמירת פריקה חופשית"""
+    user_id = query.from_user.id
+    content = temp_data[user_id]["venting_content"]
+    
+    conn = sqlite3.connect('anxiety_data.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+    INSERT INTO free_venting (user_id, content, save_for_analysis)
+    VALUES (?, ?, ?)
+    ''', (user_id, content, save_for_analysis))
+    conn.commit()
+    conn.close()
+    
+    if save_for_analysis:
+        message = "💾 נשמר לניתוח! הפריקה שלך תעזור לי להבין טוב יותר את הדפוסים שלך."
+    else:
+        message = "🗑️ הפריקה לא נשמרה. אני מקווה שזה עזר לך להרגיש טוב יותר."
+    
+    # ניקוי מצב
+    if user_id in user_states:
+        del user_states[user_id]
+    if user_id in temp_data:
+        del temp_data[user_id]
+    
+    keyboard = [[InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]]
+    
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 def get_immediate_recommendation(anxiety_level):
     """המלצה מיידית על פי רמת חרדה"""
@@ -420,10 +461,9 @@ def analyze_user_patterns(user_id):
 
 def get_personalized_recommendation(user_id, current_data):
     """המלצה מותאמת אישית"""
-    # כאן ניתן להוסיף לוגיקה מתקדמת יותר
     base_recommendation = get_immediate_recommendation(current_data["anxiety_level"])
     
-    if current_data["location"] == "🏢 עבודה":
+    if current_data.get("location") == "🏢 עבודה":
         return base_recommendation + "\n\nכיוון שזה בעבודה, נסה לקחת הפסקה קצרה או לצאת לאוויר צח."
     
     return base_recommendation
@@ -470,7 +510,7 @@ async def show_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
     
     for location, count in location_counter.most_common(3):
-        percentage = (count / len(locations)) * 100
+        percentage = (count / len(locations)) * 100 if locations else 0
         analysis_text += f"• {location}: {count} פעמים ({percentage:.1f}%)\n"
     
     analysis_text += "\n💡 לקבלת המלצות מותאמות, המשך לדווח על אירועי חרדה."
@@ -521,22 +561,46 @@ async def show_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(settings_text, reply_markup=get_main_keyboard())
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """לוג שגיאות"""
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
 def main():
     """פונקציה ראשית"""
-    # יצירת בסיס נתונים
-    init_database()
-    
-    # יצירת האפליקציה
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # הוספת handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    application.add_handler(CallbackQueryHandler(handle_callback_query))
-    
-    # הרצת הבוט
-    print("🤖 הבוט מתחיל לרוץ...")
-    application.run_polling()
+    try:
+        # יצירת בסיס נתונים
+        init_database()
+        
+        # יצירת האפליקציה
+        application = Application.builder().token(BOT_TOKEN).build()
+        
+        # הוספת handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+        application.add_handler(CallbackQueryHandler(handle_callback_query))
+        
+        # הוספת error handler
+        application.add_error_handler(error_handler)
+        
+        # הרצת הבוט
+        logger.info("🤖 הבוט מתחיל לרוץ...")
+        
+        # הגדרת פורט עבור Render
+        port = int(os.environ.get('PORT', 8000))
+        
+        # הרצה עם webhook או polling
+        if os.environ.get('WEBHOOK_URL'):
+            application.run_webhook(
+                listen="0.0.0.0",
+                port=port,
+                webhook_url=os.environ.get('WEBHOOK_URL')
+            )
+        else:
+            application.run_polling()
+            
+    except Exception as e:
+        logger.error(f"שגיאה בהפעלת הבוט: {e}")
+        raise
 
 if __name__ == '__main__':
     main()
