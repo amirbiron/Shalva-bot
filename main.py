@@ -3,6 +3,7 @@ import sqlite3
 import os
 import json
 from datetime import datetime, timedelta
+import pymongo
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
@@ -12,10 +13,11 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # טוקן הבוט
-BOT_TOKEN = os.getenv('BOT_TOKEN', "7622868890:AAEnk_PC-hbOJIYWICXgE8F654RlOJxY5Sk")
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+MONGO_URI = os.getenv('MONGO_URI')
 
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN לא נמצא!")
+if not BOT_TOKEN or not MONGO_URI:
+    raise ValueError("FATAL: BOT_TOKEN or MONGO_URI not found in environment variables!")
 
 # הגדרת מצבי שיחה
 # דיווח מהיר
@@ -75,6 +77,35 @@ def init_database():
     conn.commit()
     conn.close()
 
+# --- הגדרת MongoDB למעקב משתמשים ---
+try:
+    client = pymongo.MongoClient(MONGO_URI)
+    db = client.get_database("ShalvaBotDB")
+    users_collection = db.get_collection("users")
+    logger.info("Successfully connected to MongoDB.")
+except Exception as e:
+    logger.error(f"Could not connect to MongoDB: {e}")
+    exit()
+
+# --- פונקציית עזר לשמירת משתמש ---
+async def ensure_user_in_db(update: Update):
+    try:
+        user = update.effective_user
+        if not user:
+            return
+        user_info = {
+            "chat_id": user.id,
+            "first_name": user.first_name,
+            "username": user.username,
+        }
+        users_collection.update_one(
+            {"chat_id": user.id},
+            {"$set": user_info, "$setOnInsert": {"first_seen": datetime.now()}},
+            upsert=True
+        )
+    except Exception as e:
+        logger.error(f"Could not log user to MongoDB: {e}")
+
 # אפשרויות מוגדרות מראש
 LOCATION_OPTIONS = ['🏠 בית', '🏢 עבודה', '🚗 רחוב', '🛒 קניון', '🚌 תחבורה ציבורית', '📍 אחר']
 PEOPLE_OPTIONS = ['👤 לבד', '👥 עם חברים', '👔 קולגות', '👨‍👩‍👧‍👦 משפחה', '👥 זרים', '👥 אחר']
@@ -126,6 +157,7 @@ def get_progress_indicator(current_step, total_steps):
 
 async def handle_menu_during_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בלחיצות על תפריט במהלך שיחה פעילה"""
+    await ensure_user_in_db(update)
     text = update.message.text
     
     # ניקוי הנתונים הזמניים
@@ -150,6 +182,7 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """פונקציית התחלה"""
+    await ensure_user_in_db(update)
     user_id = update.effective_user.id
     
     # בדיקה אם המשתמש קיים במערכת
@@ -195,6 +228,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בהודעות כלליות שלא במסגרת שיחה"""
+    await ensure_user_in_db(update)
     text = update.message.text
     
     # טיפול בכפתורי התפריט הראשי - תמיד פעילים
@@ -233,6 +267,7 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
 
 async def start_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת דיווח מהיר"""
+    await ensure_user_in_db(update)
     context.user_data.clear()  # ניקוי נתונים קודמים
     context.user_data['report_type'] = 'quick'
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -317,6 +352,7 @@ async def cancel_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def start_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת דיווח מלא"""
+    await ensure_user_in_db(update)
     context.user_data.clear()
     context.user_data['report_type'] = 'full'
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -455,6 +491,7 @@ async def cancel_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def start_free_venting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת פריקה חופשית"""
+    await ensure_user_in_db(update)
     context.user_data.clear()
     
     await update.message.reply_text(
@@ -594,6 +631,7 @@ def create_venting_conversation():
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בלחיצות על כפתורים כלליים"""
+    await ensure_user_in_db(update)
     query = update.callback_query
     await query.answer()
     
