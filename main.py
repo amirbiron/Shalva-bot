@@ -633,6 +633,8 @@ def create_full_report_conversation():
             CommandHandler("start", cancel_full_report),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report)
         ]
+        per_user=True,
+        per_chat=True,
     )
 
 def create_venting_conversation():
