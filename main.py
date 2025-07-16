@@ -4,6 +4,7 @@ import os
 import json
 from datetime import datetime, timedelta
 import pymongo
+import google.generativeai as genai
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
@@ -15,9 +16,13 @@ logger = logging.getLogger(__name__)
 # טוקן הבוט
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not BOT_TOKEN or not MONGO_URI:
     raise ValueError("FATAL: BOT_TOKEN or MONGO_URI not found in environment variables!")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
 
 # הגדרת מצבי שיחה
 # דיווח מהיר
@@ -28,6 +33,9 @@ FULL_DESC, FULL_ANXIETY, FULL_LOCATION, FULL_PEOPLE, FULL_WEATHER = range(5)
 
 # פריקה חופשית
 FREE_VENTING, VENTING_SAVE = range(2)
+
+# שיחת תמיכה
+SUPPORT_CHAT = range(17)
 
 # הגדרת בסיס הנתונים
 def init_database():
@@ -117,7 +125,7 @@ def get_main_keyboard():
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
-        [KeyboardButton("⚙️ הגדרות")]
+        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("⚙️ הגדרות")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -172,6 +180,10 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
         await show_help(update, context)
     elif text == "⚙️ הגדרות":
         await show_settings_menu(update, context)
+    elif text == "💬 זקוק/ה לאוזן קשבת":
+        keyboard = [[InlineKeyboardButton("לחץ כאן כדי להתחיל בשיחה אישית", callback_data='support_chat')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text('כדי להגן על פרטיותך ולהיכנס למצב שיחה, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     
     # יציאה מהשיחה
     return ConversationHandler.END
@@ -240,6 +252,10 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
         await show_help(update, context)
     elif text == "⚙️ הגדרות":
         await show_settings_menu(update, context)
+    elif text == "💬 זקוק/ה לאוזן קשבת":
+        keyboard = [[InlineKeyboardButton("לחץ כאן כדי להתחיל בשיחה אישית", callback_data='support_chat')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text('כדי להגן על פרטיותך ולהיכנס למצב שיחה, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     elif text == "⚡ דיווח מהיר":
         await update.message.reply_text(
             "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מהיר.",
@@ -559,6 +575,47 @@ async def cancel_venting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # =================================================================
+# שיחת תמיכה מבוססת Gemini
+# =================================================================
+
+EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט טלגרם. משתמש פונה אליך כשהוא מרגיש לחץ, חרדה, או צורך באוזן קשבת. תפקידך: להגיב בחום, בטון רך, בגישה לא שיפוטית ומכילה. אתה לא מייעץ – אתה שם בשבילו. שמור על שפה אנושית, פשוטה ואכפתית. אם המשתמש שותק – עודד אותו בעדינות. המטרה שלך: להשרות רוגע, להקל על תחושת הבדידות, ולעזור לו להרגיש שמישהו איתו."""
+
+async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    if not GEMINI_API_KEY:
+        await query.edit_message_text("שירות השיחה אינו זמין כרגע.")
+        return ConversationHandler.END
+
+    context.user_data['gemini_model'] = genai.GenerativeModel('gemini-1.5-flash')
+    opening_message = "אני כאן, איתך. מה יושב לך על הלב?\nכדי לסיים, שלח /end_chat. כדי לחזור לתפריט הראשי בכל שלב, שלח /start."
+    context.user_data['chat_history'] = [{'role': 'user', 'parts': [EMPATHY_PROMPT]}, {'role': 'model', 'parts': [opening_message]}]
+    await query.edit_message_text(text=opening_message)
+    return SUPPORT_CHAT
+
+async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    user_message = update.message.text
+    model = context.user_data.get('gemini_model')
+    if not model:
+        await update.message.reply_text("אני מתנצל, נתקלתי בבעיה. נסה להתחיל מחדש עם /start.")
+        return ConversationHandler.END
+
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+    chat = model.start_chat(history=context.user_data.get('chat_history', []))
+    response = await chat.send_message_async(user_message)
+    bot_response = response.text
+    context.user_data['chat_history'].append({'role': 'user', 'parts': [user_message]})
+    context.user_data['chat_history'].append({'role': 'model', 'parts': [bot_response]})
+    await update.message.reply_text(bot_response)
+    return SUPPORT_CHAT
+
+async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("שמחתי להיות כאן בשבילך. אני תמיד כאן אם תצטרך אותי שוב. ❤️\nכדי לחזור לתפריט הראשי, הקלד /start.")
+    if 'chat_history' in context.user_data: del context.user_data['chat_history']
+    if 'gemini_model' in context.user_data: del context.user_data['gemini_model']
+    return ConversationHandler.END
+
+# =================================================================
 # יצירת ConversationHandlers
 # =================================================================
 
@@ -572,7 +629,8 @@ def create_quick_report_conversation():
                 MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות)$"), get_quick_description)
+                MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_quick_description)
             ],
             QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^anxiety_")]
         },
@@ -592,7 +650,8 @@ def create_full_report_conversation():
                 MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND, get_full_description)
+                MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_full_description)
             ],
             FULL_ANXIETY: [CallbackQueryHandler(get_full_anxiety_level, pattern="^anxiety_")],
             FULL_LOCATION: [CallbackQueryHandler(get_full_location, pattern="^location_")],
@@ -615,7 +674,8 @@ def create_venting_conversation():
                 MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
                 MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות)$"), get_venting_content)
+                MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_venting_content)
             ],
             VENTING_SAVE: [CallbackQueryHandler(save_venting_choice, pattern="^save_venting_")]
         },
@@ -623,6 +683,16 @@ def create_venting_conversation():
             CommandHandler("start", cancel_venting),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting)
         ]
+    )
+
+def create_support_conversation():
+    """יצירת שיחת תמיכה"""
+    return ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_support_chat, pattern='^support_chat$')],
+        states={SUPPORT_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message)]},
+        fallbacks=[CommandHandler('end_chat', end_support_chat), CommandHandler('start', start)],
+        per_user=True,
+        per_chat=True,
     )
 
 # =================================================================
@@ -1376,6 +1446,7 @@ def main():
         application.add_handler(create_quick_report_conversation())
         application.add_handler(create_full_report_conversation())
         application.add_handler(create_venting_conversation())
+        application.add_handler(create_support_conversation())
         
         # הוספת handlers כלליים
         application.add_handler(CommandHandler("start", start))
