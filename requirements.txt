@@ -1,7 +1,6 @@
-python-telegram-bot==20.0
-python-dotenv==1.0.0
-pymongo[srv]
-google-generativeai
+# Telegram Bot Library
+python-telegram-bot
+
 # Google Generative AI (for Gemini)
 google-generativeai
 
