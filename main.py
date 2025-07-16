@@ -1467,61 +1467,31 @@ def main() -> None:
     """
     Initializes and runs the Telegram bot with a structured handler order.
     """
-    # שלב 0: ודא שכל מנהלי השיחות מוגדרים לפני פונקציית main.
-    # לדוגמה, הקוד הזה צריך להופיע איפשהו לפני שהפונקציה main מתחילה:
-    #
-    # conv_handler_support = ConversationHandler(...)
-    # conv_handler_reporting = ConversationHandler(...)
-    #
-    # ודא שבכל ConversationHandler שלך, הפקודה /start נמצאת ב-fallbacks!
-    # fallbacks=[CommandHandler('start', start_command)]
-    # זה קריטי כדי לאפשר למשתמשים "לברוח" משיחה תקועה.
-
     # שלב 1: בניית האפליקציה
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(TOKEN).build()
 
     # שלב 2: קביעת תפריט הפקודות של הבוט
-    # מפעיל את הפונקציה שהוספנו כדי להציג למשתמש תפריט פקודות קבוע
     application.job_queue.run_once(setup_bot_commands, 0)
 
-    # שלב 3: רישום כל ה-ConversationHandlers ראשונים!
-    # זה הסדר הנכון והקריטי ביותר. הבוט יבדוק קודם אם המשתמש בשיחה פעילה.
-    
+    # של_3: רישום כל ה-ConversationHandlers ראשונים!
     # ודא ששמות המשתנים כאן תואמים לשמות בקוד שלך
-    application.add_handler(conv_handler_full_report)
+    application.add_handler(conv_handler_full_report) # השם שתוקן מהשגיאה הקודמת
     # application.add_handler(conv_handler_reporting) # הסר את ההערה אם יש לך כזה
-    # application.add_handler(conv_handler_free_venting) # הסר את ההערה אם יש לך כזה
-
-
+    
     # שלב 4: רישום מנהלי פקודות ראשיים
-    # אלו יפעלו רק אם המשתמש לא נמצא בשיחה פעילה.
-    application.add_handler(CommandHandler("start", start_command)) # ודא ששם הפונקציה נכון
-    application.add_handler(CommandHandler("help", help_command))   # ודא ששם הפונקציה נכון
+    application.add_handler(CommandHandler("start", start)) # שימוש בשם הנכון 'start'
+    application.add_handler(CommandHandler("help", help))   # ודא ששם פונקציית העזרה הוא 'help'
     # הוסף כאן את כל שאר מנהלי הפקודות שלך...
-
 
     # שלב 5: הפעלת הבוט
     logger.info("Starting bot polling...")
     application.run_polling()
+    
+    if __name__ == "__main__":
+    # הפעלת שרת ה-Flask ברקע כדי למנוע מהבוט "להירדם" ב-Render
+    # (בהנחה שפונקציית run_flask קיימת אצלך בקוד)
+    flask_thread = Thread(target=run_flask)
+    flask_thread.start()
 
-    # שלב 3: רישום מנהלי פקודות ראשיים.
-    # אלו יפעלו רק אם המשתמש לא נמצא בשיחה פעילה.
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", show_help))
-    # הוסף כאן את כל שאר מנהלי הפקודות שלך...
-
-    # שלב 4: רישום מנהלי כפתורים כלליים.
-    # מנהל זה יטפל בכפתורים שלא מתחילים שיחה, כמו כפתור "אודות".
-    # application.add_handler(CallbackQueryHandler(about_button_handler, pattern='^about$'))
-
-    # שלב 5: רישום מנהלי הודעות כלליים (אם יש).
-    # יש להוסיף אותם בסוף, והם צריכים להיות כמה שיותר ספציפיים.
-    # לדוגמה, מנהל שמגיב רק להודעות טקסט.
-    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo_message))
-
-    # שלב 6: הפעלת הבוט
-    logger.info("Starting bot polling...")
-    application.run_polling()
-
-if __name__ == '__main__':
+    # קריאה לפונקציה הראשית כדי להתחיל את הבוט
     main()
