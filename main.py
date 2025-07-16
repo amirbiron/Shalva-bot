@@ -14,11 +14,11 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # טוקן הבוט
-BOT_TOKEN = os.getenv('BOT_TOKEN')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 
-if not BOT_TOKEN or not MONGO_URI:
-    raise ValueError("FATAL: BOT_TOKEN or MONGO_URI not found in environment variables!")
+if not TELEGRAM_TOKEN or not MONGO_URI:
+    raise ValueError("FATAL: TELEGRAM_TOKEN or MONGO_URI not found in environment variables!")
 
 # הגדרת מצבי שיחה
 # דיווח מהיר
