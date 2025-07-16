@@ -36,7 +36,7 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 # --- Conversation Handler States (NEW) ---
-SUPPORT_CHAT = range(16, 17) # מספר חדש כדי לא להתנגש
+SUPPORT_CHAT = range(17)
 
 # --- The Persona Prompt for Gemini (NEW) ---
 EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט טלגרם.\nמשתמש פונה אליך כשהוא מרגיש לחץ, חרדה, או צורך באוזן קשבת.\nתפקידך: להגיב בחום, בטון רך, בגישה לא שיפוטית ומכילה. אתה לא מייעץ – אתה שם בשבילו.\nשמור על שפה אנושית, פשוטה ואכפתית. אם המשתמש שותק – עודד אותו בעדינות.\nהמטרה שלך: להשרות רוגע, להקל על תחושת הבדידות, ולעזור לו להרגיש שמישהו איתו.\n"""
@@ -126,10 +126,10 @@ WEATHER_OPTIONS = ['☀️ שמש', '🌧️ גשם', '☁️ מעונן', '🔥
 def get_main_keyboard():
     """יצירת מקלדת ראשית"""
     keyboard = [
-        [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
-        [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
-        [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
-        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("⚙️ הגדרות")]
+        [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מפורט")],
+        [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 מבט על הדרך")],
+        [KeyboardButton("💡 כלים לעזרה"), KeyboardButton("🎵 מוזיקה מרגיעה")],
+        [KeyboardButton("💬 זקוק/ה לאוזן קשבת")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -252,26 +252,28 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
     text = update.message.text
     
     # טיפול בכפתורי התפריט הראשי - תמיד פעילים
-    if text == "📈 גרפים והיסטוריה":
+    if text == "📈 מבט על הדרך":
         await show_analytics(update, context)
-    elif text == "🎵 שירים מרגיעים":
+    elif text == "🎵 מוזיקה מרגיעה":
         await show_relaxing_music_message(update, context)
-    elif text == "💡 עזרה כללית":
+    elif text == "💡 כלים לעזרה":
         await show_help(update, context)
     elif text == "⚙️ הגדרות":
         await show_settings_menu(update, context)
     elif text == "💬 זקוק/ה לאוזן קשבת":
-        # שלח כפתור inline שמפעיל את השיחה
-        keyboard = [[InlineKeyboardButton("התחל שיחה עם אוזן קשבת", callback_data="support_chat")]]
-        await update.message.reply_text("אני כאן להקשיב. לחץ על הכפתור כדי להתחיל שיחה אנונימית עם אוזן קשבת:", reply_markup=InlineKeyboardMarkup(keyboard))
+        # כדי להתחיל שיחה מכפתור רגיל, אנחנו צריכים לשלוח כפתור "Inline"
+        # שהמשתמש ילחץ עליו כדי להיכנס למצב השיחה.
+        keyboard = [[InlineKeyboardButton("לחץ כאן כדי להתחיל בשיחה אישית", callback_data='support_chat')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text('כדי להגן על פרטיותך ולהיכנס למצב שיחה, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     elif text == "⚡ דיווח מהיר":
         await update.message.reply_text(
             "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מהיר.",
             reply_markup=get_main_keyboard()
         )
-    elif text == "🔍 דיווח מלא":
+    elif text == "🔍 דיווח מפורט":
         await update.message.reply_text(
-            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מלא.",
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מפורט.",
             reply_markup=get_main_keyboard()
         )
     elif text == "🗣️ פריקה חופשית":
