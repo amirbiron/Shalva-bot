@@ -1391,6 +1391,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         except:
             pass  # אם גם זה נכשל, לא נעשה כלום
 
+# Debugging catch-all handler
+async def unknown_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles any message that wasn't caught by other handlers."""
+    logger.info(f"Caught an unhandled message or command: {update.message.text}")
+    await update.message.reply_text("קיבלתי את הודעתך, אך איני בטוח מה לעשות איתה. נסה להשתמש בפקודת /start כדי להתחיל מחדש.")
+
 # --- Support Chat Conversation Functions (NEW) ---
 
 async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1486,6 +1492,9 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start)) # שימוש בשם הנכון 'start'
     application.add_handler(CommandHandler("help", help))   # ודא ששם פונקציית העזרה הוא 'help'
     # הוסף כאן את כל שאר מנהלי הפקודות שלך...
+
+    # This handler must be added last. It's a "catch-all" for debugging.
+    application.add_handler(MessageHandler(filters.TEXT | filters.COMMAND, unknown_handler))
 
     # שלב 5: הפעלת הבוט
     logger.info("Starting bot polling...")
