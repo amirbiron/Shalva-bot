@@ -7,7 +7,7 @@ import pymongo
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
-import google.generativeai as genai
+# import google.generativeai as genai  # הוסר לחלוטין
 
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -31,22 +31,22 @@ FULL_DESC, FULL_ANXIETY, FULL_LOCATION, FULL_PEOPLE, FULL_WEATHER = range(5)
 FREE_VENTING, VENTING_SAVE = range(2)
 
 # --- Gemini API Configuration (NEW) ---
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if not GEMINI_API_KEY:
-    logger.warning("GEMINI_API_KEY not found. Support chat feature will not work.")
-else:
-    genai.configure(api_key=GEMINI_API_KEY)
+# GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+# if not GEMINI_API_KEY:
+#     logger.warning("GEMINI_API_KEY not found. Support chat feature will not work.")
+# else:
+#     genai.configure(api_key=GEMINI_API_KEY)
 
 # --- Conversation Handler States (NEW) ---
-SUPPORT_CHAT = range(1)
+# SUPPORT_CHAT = range(1)  # הוסר
 
 # --- The Persona Prompt for Gemini (NEW) ---
-EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט טלגרם.
-משתמש פונה אליך כשהוא מרגיש לחץ, חרדה, או צורך באוזן קשבת.
-תפקידך: להגיב בחום, בטון רך, בגישה לא שיפוטית ומכילה. אתה לא מייעץ – אתה שם בשבילו.
-שמור על שפה אנושית, פשוטה ואכפתית. אם המשתמש שותק – עודד אותו בעדינות.
-המטרה שלך: להשרות רוגע, להקל על תחושת הבדידות, ולעזור לו להרגיש שמישהו איתו.
-"""
+# EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט טלגרם.
+# משתמש פונה אליך כשהוא מרגיש לחץ, חרדה, או צורך באוזן קשבת.
+# תפקידך: להגיב בחום, בטון רך, בגישה לא שיפוטית ומכילה. אתה לא מייעץ – אתה שם בשבילו.
+# שמור על שפה אנושית, פשוטה ואכפתית. אם המשתמש שותק – עודד אותו בעדינות.
+# המטרה שלך: להשרות רוגע, להקל על תחושת הבדידות, ולעזור לו להרגיש שמישהו איתו.
+# """
 
 # הגדרת בסיס הנתונים
 def init_database():
@@ -136,7 +136,6 @@ def get_main_keyboard():
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
-        [InlineKeyboardButton("💬 זקוק/ה לאוזן קשבת", callback_data='start_support_chat')],
         [KeyboardButton("⚙️ הגדרות")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1401,68 +1400,7 @@ async def unknown_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 # --- Support Chat Conversation Functions (NEW) ---
 
-async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Starts the support conversation, sends a warm welcome, and sets the state."""
-    query = update.callback_query
-    await query.answer()
-
-    if not GEMINI_API_KEY:
-        await query.edit_message_text(text="אני מתנצל, שירות השיחה אינו זמין כרגע. נסה שוב מאוחר יותר.")
-        return ConversationHandler.END
-
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    context.user_data['gemini_model'] = model
-
-    opening_message = "אני כאן, איתך. מה יושב לך על הלב? \nאתה יכול לכתוב לי הכל. כשתרצה/י לסיים, פשוט שלח/י /end_chat\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start."
-    context.user_data['chat_history'] = [
-        {'role': 'user', 'parts': [EMPATHY_PROMPT]},
-        {'role': 'model', 'parts': [opening_message]}
-    ]
-    
-    await query.edit_message_text(text=opening_message)
-    return SUPPORT_CHAT
-
-async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handles messages during the support chat, sends them to Gemini, and replies to the user."""
-    user_message = update.message.text
-    chat_history = context.user_data.get('chat_history', [])
-    model = context.user_data.get('gemini_model')
-
-    if not model:
-        await update.message.reply_text("אני מתנצל, נתקלתי בבעיה. בוא ננסה להתחיל מחדש עם /start.")
-        return ConversationHandler.END
-
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
-
-    try:
-        chat = model.start_chat(history=chat_history)
-        response = await chat.send_message_async(user_message)
-        bot_response = response.text
-        
-        context.user_data['chat_history'].append({'role': 'user', 'parts': [user_message]})
-        context.user_data['chat_history'].append({'role': 'model', 'parts': [bot_response]})
-
-        await update.message.reply_text(bot_response)
-
-    except Exception as e:
-        logger.error(f"Error calling Gemini API: {e}")
-        await update.message.reply_text("אני מתנצל, נתקלתי בבעיה זמנית. אולי ננסה שוב בעוד רגע?")
-        
-    return SUPPORT_CHAT
-
-async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Ends the support conversation and clears user data."""
-    await update.message.reply_text(
-        "שמחתי להיות כאן בשבילך. אני תמיד כאן אם תצטרך/י אותי שוב. ❤️\n"
-        "כדי לחזור לתפריט הראשי, הקלד/י /start."
-    )
-    
-    if 'chat_history' in context.user_data:
-        del context.user_data['chat_history']
-    if 'gemini_model' in context.user_data:
-        del context.user_data['gemini_model']
-        
-    return ConversationHandler.END
+# async def start_support_chat ... (הוסרו כל הפונקציות הקשורות לשיחת התמיכה)
 
 # =================================================================
 # ConversationHandler assignments (moved here for correct order)
