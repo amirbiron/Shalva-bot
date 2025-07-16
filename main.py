@@ -607,7 +607,7 @@ def create_quick_report_conversation():
         fallbacks=[
             CommandHandler("start", cancel_quick_report),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_quick_report)
-        ]
+        ],
         per_user=True,
         per_chat=True,
     )
@@ -632,7 +632,7 @@ def create_full_report_conversation():
         fallbacks=[
             CommandHandler("start", cancel_full_report),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report)
-        ]
+        ],
         per_user=True,
         per_chat=True,
     )
