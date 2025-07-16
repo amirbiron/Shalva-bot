@@ -1490,8 +1490,8 @@ def main() -> None:
     if __name__ == "__main__":
     # הפעלת שרת ה-Flask ברקע כדי למנוע מהבוט "להירדם" ב-Render
     # (בהנחה שפונקציית run_flask קיימת אצלך בקוד)
-    flask_thread = Thread(target=run_flask)
-    flask_thread.start()
+        flask_thread = Thread(target=run_flask)
+        flask_thread.start()
 
     # קריאה לפונקציה הראשית כדי להתחיל את הבוט
-    main()
+        main()
