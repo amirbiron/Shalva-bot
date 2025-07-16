@@ -4,7 +4,7 @@ import os
 import json
 from datetime import datetime, timedelta
 import pymongo
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
 import google.generativeai as genai
@@ -196,6 +196,14 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
     # יציאה מהשיחה
     return ConversationHandler.END
 
+async def setup_bot_commands(application: Application) -> None:
+    """Sets the bot's menu commands."""
+    commands = [
+        BotCommand("start", "התחלה מחדש / תפריט ראשי"),
+        BotCommand("help", "עזרה ומידע"),
+    ]
+    await application.bot.set_my_commands(commands)
+
 # =================================================================
 # START וההודעות הכלליות
 # =================================================================
@@ -293,7 +301,7 @@ async def start_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     await update.message.reply_text(
-        "⚡ דיווח מהיר\n\n🔄 שלב 1/2: תיאור המצב\n\nמה קורה עכשיו? (תיאור קצר)",
+        "⚡ דיווח מהיר\n\n🔄 שלב 1/2: תיאור המצב\n\nמה קורה עכשיו? (תיאור קצר)\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start.",
         reply_markup=None
     )
     return QUICK_DESC
@@ -379,7 +387,7 @@ async def start_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     progress = get_progress_indicator(1, 5)
     await update.message.reply_text(
-        f"🔍 דיווח מלא\n\n{progress} תיאור המצב\n\nמה גורם לחרדה עכשיו? (תאר במפורט)",
+        f"🔍 דיווח מלא\n\n{progress} תיאור המצב\n\nמה גורם לחרדה עכשיו? (תאר במפורט)\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start.",
         reply_markup=None
     )
     return FULL_DESC
@@ -515,7 +523,7 @@ async def start_free_venting(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data.clear()
     
     await update.message.reply_text(
-        "🗣️ פריקה חופשית\n\nכתב כל מה שאתה מרגיש. אין שאלות, אין לחץ.\nרק תן לזה לצאת...",
+        "🗣️ פריקה חופשית\n\nכתב כל מה שאתה מרגיש. אין שאלות, אין לחץ.\nרק תן לזה לצאת...\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start.",
         reply_markup=None
     )
     return FREE_VENTING
@@ -1393,7 +1401,7 @@ async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE)
     model = genai.GenerativeModel('gemini-1.5-flash')
     context.user_data['gemini_model'] = model
 
-    opening_message = "אני כאן, איתך. מה יושב לך על הלב? \nאתה יכול לכתוב לי הכל. כשתרצה/י לסיים, פשוט שלח/י /end_chat"
+    opening_message = "אני כאן, איתך. מה יושב לך על הלב? \nאתה יכול לכתוב לי הכל. כשתרצה/י לסיים, פשוט שלח/י /end_chat\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start."
     context.user_data['chat_history'] = [
         {'role': 'user', 'parts': [EMPATHY_PROMPT]},
         {'role': 'model', 'parts': [opening_message]}
@@ -1465,14 +1473,36 @@ def main() -> None:
     # שלב 1: בניית האפליקציה
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # שלב 2: רישום כל ה-ConversationHandlers ראשונים!
-    # זה הסדר הנכון והקריטי ביותר.
-    # הבוט יבדוק קודם אם המשתמש נמצא בשיחה פעילה.
+    def main() -> None:
+    """
+    Initializes and runs the Telegram bot with a structured handler order.
+    """
+    # שלב 1: בניית האפליקציה
+    application = Application.builder().token(TOKEN).build()
+
+    # שלב 2: קביעת תפריט הפקודות של הבוט
+    # מפעיל את הפונקציה שהוספנו כדי להציג למשתמש תפריט פקודות קבוע
+    application.job_queue.run_once(setup_bot_commands, 0)
+
+    # שלב 3: רישום כל ה-ConversationHandlers ראשונים!
+    # זה הסדר הנכון והקריטי ביותר. הבוט יבדוק קודם אם המשתמש בשיחה פעילה.
     
-    # הוסף כאן את כל מנהלי השיחות שלך. לדוגמה:
-    # application.add_handler(conv_handler_support)
-    # application.add_handler(conv_handler_reporting)
-    # application.add_handler(conv_handler_free_venting)
+    # ודא ששמות המשתנים כאן תואמים לשמות בקוד שלך
+    application.add_handler(conv_handler_support)
+    # application.add_handler(conv_handler_reporting) # הסר את ההערה אם יש לך כזה
+    # application.add_handler(conv_handler_free_venting) # הסר את ההערה אם יש לך כזה
+
+
+    # שלב 4: רישום מנהלי פקודות ראשיים
+    # אלו יפעלו רק אם המשתמש לא נמצא בשיחה פעילה.
+    application.add_handler(CommandHandler("start", start_command)) # ודא ששם הפונקציה נכון
+    application.add_handler(CommandHandler("help", help_command))   # ודא ששם הפונקציה נכון
+    # הוסף כאן את כל שאר מנהלי הפקודות שלך...
+
+
+    # שלב 5: הפעלת הבוט
+    logger.info("Starting bot polling...")
+    application.run_polling()
 
     # שלב 3: רישום מנהלי פקודות ראשיים.
     # אלו יפעלו רק אם המשתמש לא נמצא בשיחה פעילה.
