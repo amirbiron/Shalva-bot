@@ -4,21 +4,20 @@ import os
 import json
 from datetime import datetime, timedelta
 import pymongo
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
-import google.generativeai as genai
 
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # טוקן הבוט
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 
-if not TELEGRAM_TOKEN or not MONGO_URI:
-    raise ValueError("FATAL: TELEGRAM_TOKEN or MONGO_URI not found in environment variables!")
+if not BOT_TOKEN or not MONGO_URI:
+    raise ValueError("FATAL: BOT_TOKEN or MONGO_URI not found in environment variables!")
 
 # הגדרת מצבי שיחה
 # דיווח מהיר
@@ -29,17 +28,6 @@ FULL_DESC, FULL_ANXIETY, FULL_LOCATION, FULL_PEOPLE, FULL_WEATHER = range(5)
 
 # פריקה חופשית
 FREE_VENTING, VENTING_SAVE = range(2)
-
-# --- Gemini API Configuration (NEW) ---
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-
-# --- Conversation Handler States (NEW) ---
-SUPPORT_CHAT = range(17)
-
-# --- The Persona Prompt for Gemini (NEW) ---
-EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט טלגרם.\nמשתמש פונה אליך כשהוא מרגיש לחץ, חרדה, או צורך באוזן קשבת.\nתפקידך: להגיב בחום, בטון רך, בגישה לא שיפוטית ומכילה. אתה לא מייעץ – אתה שם בשבילו.\nשמור על שפה אנושית, פשוטה ואכפתית. אם המשתמש שותק – עודד אותו בעדינות.\nהמטרה שלך: להשרות רוגע, להקל על תחושת הבדידות, ולעזור לו להרגיש שמישהו איתו.\n"""
 
 # הגדרת בסיס הנתונים
 def init_database():
@@ -126,10 +114,10 @@ WEATHER_OPTIONS = ['☀️ שמש', '🌧️ גשם', '☁️ מעונן', '🔥
 def get_main_keyboard():
     """יצירת מקלדת ראשית"""
     keyboard = [
-        [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מפורט")],
-        [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 מבט על הדרך")],
-        [KeyboardButton("💡 כלים לעזרה"), KeyboardButton("🎵 מוזיקה מרגיעה")],
-        [KeyboardButton("💬 זקוק/ה לאוזן קשבת")]
+        [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
+        [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
+        [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
+        [KeyboardButton("⚙️ הגדרות")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -188,31 +176,23 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
     # יציאה מהשיחה
     return ConversationHandler.END
 
-async def setup_bot_commands(application: Application) -> None:
-    """Sets the bot's menu commands."""
-    commands = [
-        BotCommand("start", "התחלה מחדש / תפריט ראשי"),
-        BotCommand("help", "עזרה ומידע"),
-    ]
-    await application.bot.set_my_commands(commands)
-
 # =================================================================
 # START וההודעות הכלליות
 # =================================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """פונקציית התחלה - גרסת בדיקה ללא מסד נתונים"""
-    # await ensure_user_in_db(update)
-    # user_id = update.effective_user.id
+    """פונקציית התחלה"""
+    await ensure_user_in_db(update)
+    user_id = update.effective_user.id
     
-    # # בדיקה אם המשתמש קיים במערכת - כל הבלוק הזה מנוטרל
-    # conn = sqlite3.connect('anxiety_data.db')
-    # cursor = conn.cursor()
-    # cursor.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,))
-    # if not cursor.fetchone():
-    #     cursor.execute("INSERT INTO user_settings (user_id) VALUES (?)", (user_id,))
-    #     conn.commit()
-    # conn.close()
+    # בדיקה אם המשתמש קיים במערכת
+    conn = sqlite3.connect('anxiety_data.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,))
+    if not cursor.fetchone():
+        cursor.execute("INSERT INTO user_settings (user_id) VALUES (?)", (user_id,))
+        conn.commit()
+    conn.close()
     
     welcome_message = """
 🤗 שלום ויפה שהגעת! 
@@ -252,28 +232,22 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
     text = update.message.text
     
     # טיפול בכפתורי התפריט הראשי - תמיד פעילים
-    if text == "📈 מבט על הדרך":
+    if text == "📈 גרפים והיסטוריה":
         await show_analytics(update, context)
-    elif text == "🎵 מוזיקה מרגיעה":
+    elif text == "🎵 שירים מרגיעים":
         await show_relaxing_music_message(update, context)
-    elif text == "💡 כלים לעזרה":
+    elif text == "💡 עזרה כללית":
         await show_help(update, context)
     elif text == "⚙️ הגדרות":
         await show_settings_menu(update, context)
-    elif text == "💬 זקוק/ה לאוזן קשבת":
-        # כדי להתחיל שיחה מכפתור רגיל, אנחנו צריכים לשלוח כפתור "Inline"
-        # שהמשתמש ילחץ עליו כדי להיכנס למצב השיחה.
-        keyboard = [[InlineKeyboardButton("לחץ כאן כדי להתחיל בשיחה אישית", callback_data='support_chat')]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text('כדי להגן על פרטיותך ולהיכנס למצב שיחה, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     elif text == "⚡ דיווח מהיר":
         await update.message.reply_text(
             "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מהיר.",
             reply_markup=get_main_keyboard()
         )
-    elif text == "🔍 דיווח מפורט":
+    elif text == "🔍 דיווח מלא":
         await update.message.reply_text(
-            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מפורט.",
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מלא.",
             reply_markup=get_main_keyboard()
         )
     elif text == "🗣️ פריקה חופשית":
@@ -299,7 +273,7 @@ async def start_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     await update.message.reply_text(
-        "⚡ דיווח מהיר\n\n🔄 שלב 1/2: תיאור המצב\n\nמה קורה עכשיו? (תיאור קצר)\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start.",
+        "⚡ דיווח מהיר\n\n🔄 שלב 1/2: תיאור המצב\n\nמה קורה עכשיו? (תיאור קצר)",
         reply_markup=None
     )
     return QUICK_DESC
@@ -385,7 +359,7 @@ async def start_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     progress = get_progress_indicator(1, 5)
     await update.message.reply_text(
-        f"🔍 דיווח מלא\n\n{progress} תיאור המצב\n\nמה גורם לחרדה עכשיו? (תאר במפורט)\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start.",
+        f"🔍 דיווח מלא\n\n{progress} תיאור המצב\n\nמה גורם לחרדה עכשיו? (תאר במפורט)",
         reply_markup=None
     )
     return FULL_DESC
@@ -521,7 +495,7 @@ async def start_free_venting(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data.clear()
     
     await update.message.reply_text(
-        "🗣️ פריקה חופשית\n\nכתב כל מה שאתה מרגיש. אין שאלות, אין לחץ.\nרק תן לזה לצאת...\n\nבכל שלב, אפשר לחזור לתפריט הראשי עם הפקודה /start.",
+        "🗣️ פריקה חופשית\n\nכתב כל מה שאתה מרגיש. אין שאלות, אין לחץ.\nרק תן לזה לצאת...",
         reply_markup=None
     )
     return FREE_VENTING
@@ -605,9 +579,7 @@ def create_quick_report_conversation():
         fallbacks=[
             CommandHandler("start", cancel_quick_report),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_quick_report)
-        ],
-        per_user=True,
-        per_chat=True,
+        ]
     )
 
 def create_full_report_conversation():
@@ -630,9 +602,7 @@ def create_full_report_conversation():
         fallbacks=[
             CommandHandler("start", cancel_full_report),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report)
-        ],
-        per_user=True,
-        per_chat=True,
+        ]
     )
 
 def create_venting_conversation():
@@ -652,18 +622,7 @@ def create_venting_conversation():
         fallbacks=[
             CommandHandler("start", cancel_venting),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting)
-        ],
-        per_user=True,
-        per_chat=True,
-    )
-
-def create_support_chat_conversation():
-    return ConversationHandler(
-        entry_points=[CallbackQueryHandler(start_support_chat, pattern='^support_chat$')],
-        states={SUPPORT_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message)]},
-        fallbacks=[CommandHandler('end_chat', end_support_chat), CommandHandler('start', start)],
-        per_user=True,
-        per_chat=True,
+        ]
     )
 
 # =================================================================
@@ -708,8 +667,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await show_reminder_settings(query, context)
     elif data == "confirm_reset":
         await reset_user_data(query, context)
-    elif data == "support_chat":
-        await start_support_chat(update, context)
 
 # =================================================================
 # פונקציות עזר ותצוגה
@@ -1402,95 +1359,41 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         except:
             pass  # אם גם זה נכשל, לא נעשה כלום
 
-# Debugging catch-all handler
-async def unknown_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles any message that wasn't caught by other handlers."""
-    logger.info(f"Caught an unhandled message or command: {update.message.text}")
-    await update.message.reply_text("קיבלתי את הודעתך, אך איני בטוח מה לעשות איתה. נסה להשתמש בפקודת /start כדי להתחיל מחדש.")
-
-# --- Support Chat Conversation Functions (NEW) ---
-
-async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    if not GEMINI_API_KEY:
-        await query.edit_message_text("שירות השיחה אינו זמין כרגע.")
-        return ConversationHandler.END
-
-    context.user_data['gemini_model'] = genai.GenerativeModel('gemini-1.5-flash')
-    opening_message = "אני כאן, איתך. מה יושב לך על הלב?\nכדי לסיים, שלח /end_chat. כדי לחזור לתפריט הראשי בכל שלב, שלח /start."
-    context.user_data['chat_history'] = [{'role': 'user', 'parts': [EMPATHY_PROMPT]}, {'role': 'model', 'parts': [opening_message]}]
-    await query.edit_message_text(text=opening_message)
-    return SUPPORT_CHAT
-
-async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user_message = update.message.text
-    model = context.user_data.get('gemini_model')
-    if not model:
-        await update.message.reply_text("אני מתנצל, נתקלתי בבעיה. נסה להתחיל מחדש עם /start.")
-        return ConversationHandler.END
-
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
-    chat = model.start_chat(history=context.user_data.get('chat_history', []))
-    response = await chat.send_message_async(user_message)
-    bot_response = response.text
-    context.user_data['chat_history'].append({'role': 'user', 'parts': [user_message]})
-    context.user_data['chat_history'].append({'role': 'model', 'parts': [bot_response]})
-    await update.message.reply_text(bot_response)
-    return SUPPORT_CHAT
-
-async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("שמחתי להיות כאן בשבילך. אני תמיד כאן אם תצטרך אותי שוב. ❤️\nכדי לחזור לתפריט הראשי, הקלד /start.")
-    if 'chat_history' in context.user_data:
-        del context.user_data['chat_history']
-    if 'gemini_model' in context.user_data:
-        del context.user_data['gemini_model']
-    return ConversationHandler.END
-
-# =================================================================
-# ConversationHandler assignments (moved here for correct order)
-# =================================================================
-conv_handler_quick_report = create_quick_report_conversation()
-conv_handler_full_report = create_full_report_conversation()
-conv_handler_venting = create_venting_conversation()
-conv_handler_support = create_support_chat_conversation()
-
 # =================================================================
 # Main Function
 # =================================================================
 
-def main() -> None:
-    """
-    Initializes and runs the Telegram bot with a structured handler order.
-    """
-    # שלב 1: בניית האפליקציה
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
+def main():
+    """פונקציה ראשית - ConversationHandler Version"""
+    try:
+        # יצירת בסיס נתונים
+        init_database()
+        
+        # יצירת האפליקציה
+        application = Application.builder().token(BOT_TOKEN).build()
+        
+        # הוספת ConversationHandlers - סדר חשוב!
+        application.add_handler(create_quick_report_conversation())
+        application.add_handler(create_full_report_conversation())
+        application.add_handler(create_venting_conversation())
+        
+        # הוספת handlers כלליים
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CallbackQueryHandler(handle_callback_query))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_general_message))
+        
+        # הוספת error handler
+        application.add_error_handler(error_handler)
+        
+        # הרצת הבוט
+        logger.info("🚀 הבוט החדש עם ConversationHandler מתחיל לרוץ...")
+        print("✅ הבוט פעיל עם ConversationHandler! לחץ Ctrl+C לעצירה")
+        application.run_polling()
+            
+    except Exception as e:
+        logger.error(f"שגיאה קריטית בהפעלת הבוט: {e}")
+        print(f"❌ שגיאה קריטית: {e}")
+        raise
 
-    # שלב 2: קביעת תפריט הפקודות של הבוט
-    application.job_queue.run_once(setup_bot_commands, 0)
-
-    # של_3: רישום כל ה-ConversationHandlers ראשונים!
-    # ודא ששמות המשתנים כאן תואמים לשמות בקוד שלך
-    application.add_handler(conv_handler_full_report) # השם שתוקן מהשגיאה הקודמת
-    # application.add_handler(conv_handler_reporting) # הסר את ההערה אם יש לך כזה
-    
-    # שלב 4: רישום מנהלי פקודות ראשיים
-    application.add_handler(CommandHandler("start", start)) # שימוש בשם הנכון 'start'
-    application.add_handler(CommandHandler("help", help))   # ודא ששם פונקציית העזרה הוא 'help'
-    # הוסף כאן את כל שאר מנהלי הפקודות שלך...
-
-    # This handler must be added last. It's a "catch-all" for debugging.
-    application.add_handler(MessageHandler(filters.TEXT | filters.COMMAND, unknown_handler))
-
-    # שלב 5: הפעלת הבוט
-    logger.info("Starting bot polling...")
-    application.run_polling()
-    
-    if __name__ == "__main__":
-    # הפעלת שרת ה-Flask ברקע כדי למנוע מהבוט "להירדם" ב-Render
-    # (בהנחה שפונקציית run_flask קיימת אצלך בקוד)
-        flask_thread = Thread(target=run_flask)
-        flask_thread.start()
-
-    # קריאה לפונקציה הראשית כדי להתחיל את הבוט
-        main()
+if __name__ == '__main__':
+    main()
