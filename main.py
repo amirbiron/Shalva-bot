@@ -950,23 +950,23 @@ async def show_relaxing_music_message(update: Update, context: ContextTypes.DEFA
 🎵 שירים מרגיעים (מוכחים מחקרית לירידה בסטרס):
 
 🎼 **"Weightless" - Marconi Union**
-🎧 [יוטיוב](https://youtu.be/UfcAVejslrU) | 🎶 [ספוטיפיי](https://open.spotify.com/track/6j2P7MoSNEDE9BwT4CGBFA)
+🎧 [יוטיוב](https://youtu.be/UfcAVejslrU) | 🎶 [ספוטיפיי](https://open.spotify.com/track/6j2P7MoSNEDE9BwT4CGBFA?si=abc123)
 ⭐ מחקר של המכון הבריטי לטכנולוגיית קול קבע שזה השיר הכי מרגיע!
 
 🎼 **"Someone Like You" - Adele**
-🎧 [יוטיוב](https://youtu.be/hLQl3WQQoQ0) | 🎶 [ספוטיפיי](https://open.spotify.com/track/4ErraYS3SSoBYF0A7cWk6H)
+🎧 [יוטיוב](https://youtu.be/hLQl3WQQoQ0) | 🎶 [ספוטיפיי](https://open.spotify.com/track/4ErraYS3SSoBYF0A7cWk6H?si=def456)
 
 🎼 **"Watermark" - Enya**
-🎧 [יוטיוב](https://youtu.be/0IKvdaXZP8Q) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0CBpxAa95ZvdH1D9K7cFem)
+🎧 [יוטיוב](https://youtu.be/0IKvdaXZP8Q) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0CBpxAa95ZvdH1D9K7cFem?si=ghi789)
 
 🎼 **"Strawberry Swing" - Coldplay**
-🎧 [יוטיוב](https://youtu.be/h3pJZSTQqIg) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh)
+🎧 [יוטיוב](https://youtu.be/h3pJZSTQqIg) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh?si=jkl012)
 
 🎼 **"Claire de Lune" - Claude Debussy**
-🎧 [יוטיוב](https://youtu.be/CvFH_6DNRCY) | 🎶 [ספוטיפיי](https://open.spotify.com/track/1B5wH8g8aKblRZZjcPWPFW)
+🎧 [יוטיוב](https://youtu.be/CvFH_6DNRCY) | 🎶 [ספוטיפיי](https://open.spotify.com/track/1B5wH8g8aKblRZZjcPWPFW?si=mno345)
 
 🎼 **"Aqueous Transmission" - Incubus**
-🎧 [יוטיוב](https://youtu.be/_ndHqJ3RP5Y) | 🎶 [ספוטיפיי](https://open.spotify.com/track/4tH42gLZMpFfkPdMCqlCE3)
+🎧 [יוטיוב](https://youtu.be/_ndHqJ3RP5Y) | 🎶 [ספוטיפיי](https://open.spotify.com/track/4tH42gLZMpFfkPdMCqlCE3?si=pqr678)
 
 💡 **טיפים להאזנה מרגיעה:**
 • האזן עם אוזניות בעוצמה נמוכה-בינונית
@@ -988,20 +988,20 @@ async def show_relaxing_music(query, context):
 🎵 שירים מרגיעים (מוכחים מחקרית לירידה בסטרס):
 
 🎼 **"Weightless" - Marconi Union**
-🎧 [יוטיוב](https://youtu.be/UfcAVejslrU) | 🎶 [ספוטיפיי](https://open.spotify.com/track/6j2P7MoSNEDE9BwT4CGBFA)
+🎧 [יוטיוב](https://youtu.be/UfcAVejslrU) | 🎶 [ספוטיפיי](https://open.spotify.com/track/6j2P7MoSNEDE9BwT4CGBFA?si=abc123)
 ⭐ מחקר של המכון הבריטי לטכנולוגיית קול קבע שזה השיר הכי מרגיע!
 
 🎼 **"Someone Like You" - Adele**  
-🎧 [יוטיוב](https://youtu.be/hLQl3WQQoQ0) | 🎶 [ספוטיפיי](https://open.spotify.com/track/4ErraYS3SSoBYF0A7cWk6H)
+🎧 [יוטיוב](https://youtu.be/hLQl3WQQoQ0) | 🎶 [ספוטיפיי](https://open.spotify.com/track/4ErraYS3SSoBYF0A7cWk6H?si=def456)
 
 🎼 **"Watermark" - Enya**
-🎧 [יוטיוב](https://youtu.be/0IKvdaXZP8Q) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0CBpxAa95ZvdH1D9K7cFem)
+🎧 [יוטיוב](https://youtu.be/0IKvdaXZP8Q) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0CBpxAa95ZvdH1D9K7cFem?si=ghi789)
 
 🎼 **"Strawberry Swing" - Coldplay**
-🎧 [יוטיוב](https://youtu.be/h3pJZSTQqIg) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh)
+🎧 [יוטיוב](https://youtu.be/h3pJZSTQqIg) | 🎶 [ספוטיפיי](https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh?si=jkl012)
 
 🎼 **"Claire de Lune" - Claude Debussy**
-🎧 [יוטיוב](https://youtu.be/CvFH_6DNRCY) | 🎶 [ספוטיפיי](https://open.spotify.com/track/1B5wH8g8aKblRZZjcPWPFW)
+🎧 [יוטיוב](https://youtu.be/CvFH_6DNRCY) | 🎶 [ספוטיפיי](https://open.spotify.com/track/1B5wH8g8aKblRZZjcPWPFW?si=mno345)
 
 💡 מומלץ להאזין עם אוזניות בעוצמה נמוכה-בינונית
 🧘‍♂️ נסה לנשום עמוק בזמן ההאזנה - זה יעזור להרגעה
