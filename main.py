@@ -1473,13 +1473,6 @@ def main() -> None:
     # שלב 1: בניית האפליקציה
     application = Application.builder().token(BOT_TOKEN).build()
 
-    def main() -> None:
-    """
-    Initializes and runs the Telegram bot with a structured handler order.
-    """
-    # שלב 1: בניית האפליקציה
-    application = Application.builder().token(TOKEN).build()
-
     # שלב 2: קביעת תפריט הפקודות של הבוט
     # מפעיל את הפונקציה שהוספנו כדי להציג למשתמש תפריט פקודות קבוע
     application.job_queue.run_once(setup_bot_commands, 0)
