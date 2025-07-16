@@ -1465,13 +1465,6 @@ async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return ConversationHandler.END
 
 # =================================================================
-# ConversationHandler assignments (moved here for correct order)
-# =================================================================
-conv_handler_quick_report = create_quick_report_conversation()
-conv_handler_full_report = create_full_report_conversation()
-conv_handler_venting = create_venting_conversation()
-
-# =================================================================
 # Main Function
 # =================================================================
 
@@ -1479,34 +1472,43 @@ def main() -> None:
     """
     Initializes and runs the Telegram bot with a structured handler order.
     """
+    # שלב 0: אתחול בסיס הנתונים
+    init_database()
+    
     # שלב 1: בניית האפליקציה
-    application = Application.builder().token(TOKEN).build()
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
 
     # שלב 2: קביעת תפריט הפקודות של הבוט
     application.job_queue.run_once(setup_bot_commands, 0)
 
-    # של_3: רישום כל ה-ConversationHandlers ראשונים!
-    # ודא ששמות המשתנים כאן תואמים לשמות בקוד שלך
-    application.add_handler(conv_handler_full_report) # השם שתוקן מהשגיאה הקודמת
-    # application.add_handler(conv_handler_reporting) # הסר את ההערה אם יש לך כזה
+    # שלב 3: רישום כל ה-ConversationHandlers על ידי קריאה לפונקציות שיוצרות אותם
+    application.add_handler(create_quick_report_conversation())
+    application.add_handler(create_full_report_conversation())
+    application.add_handler(create_venting_conversation())
+    
+    # הוספת ConversationHandler לשיחת תמיכה
+    support_conversation = ConversationHandler(
+        entry_points=[CallbackQueryHandler(start_support_chat, pattern='^start_support_chat$')],
+        states={
+            SUPPORT_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message)]
+        },
+        fallbacks=[CommandHandler("end_chat", end_support_chat)]
+    )
+    application.add_handler(support_conversation)
     
     # שלב 4: רישום מנהלי פקודות ראשיים
-    application.add_handler(CommandHandler("start", start)) # שימוש בשם הנכון 'start'
-    application.add_handler(CommandHandler("help", help))   # ודא ששם פונקציית העזרה הוא 'help'
-    # הוסף כאן את כל שאר מנהלי הפקודות שלך...
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", show_help))
+    
+    # שלב 5: רישום CallbackQueryHandler לטיפול בלחיצות על כפתורים
+    application.add_handler(CallbackQueryHandler(handle_callback_query))
+    
+    # שלב 6: רישום Error Handler
+    application.add_error_handler(error_handler)
+    
+    # שלב 7: רישום MessageHandler לטיפול בהודעות כלליות (חייב להיות אחרון)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_general_message))
 
-    # This handler must be added last. It's a "catch-all" for debugging.
-    application.add_handler(MessageHandler(filters.TEXT | filters.COMMAND, unknown_handler))
-
-    # שלב 5: הפעלת הבוט
+    # שלב 8: הפעלת הבוט
     logger.info("Starting bot polling...")
     application.run_polling()
-    
-    if __name__ == "__main__":
-    # הפעלת שרת ה-Flask ברקע כדי למנוע מהבוט "להירדם" ב-Render
-    # (בהנחה שפונקציית run_flask קיימת אצלך בקוד)
-        flask_thread = Thread(target=run_flask)
-        flask_thread.start()
-
-    # קריאה לפונקציה הראשית כדי להתחיל את הבוט
-        main()
