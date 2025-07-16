@@ -210,8 +210,8 @@ async def setup_bot_commands(application: Application) -> None:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """פונקציית התחלה - גרסת בדיקה ללא מסד נתונים"""
-    # await ensure_user_in_db(update) # ->נטרלנו
-    # user_id = update.effective_user.id # ->נטרלנו
+    # await ensure_user_in_db(update)
+    # user_id = update.effective_user.id
     
     # # בדיקה אם המשתמש קיים במערכת - כל הבלוק הזה מנוטרל
     # conn = sqlite3.connect('anxiety_data.db')
