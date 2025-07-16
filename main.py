@@ -654,7 +654,9 @@ def create_venting_conversation():
         fallbacks=[
             CommandHandler("start", cancel_venting),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting)
-        ]
+        ],
+        per_user=True,
+        per_chat=True,
     )
 
 # =================================================================
