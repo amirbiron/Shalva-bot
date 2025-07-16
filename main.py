@@ -1488,7 +1488,7 @@ def main() -> None:
     # זה הסדר הנכון והקריטי ביותר. הבוט יבדוק קודם אם המשתמש בשיחה פעילה.
     
     # ודא ששמות המשתנים כאן תואמים לשמות בקוד שלך
-    application.add_handler(conv_handler_support)
+    application.add_handler(conv_handler_full_report)
     # application.add_handler(conv_handler_reporting) # הסר את ההערה אם יש לך כזה
     # application.add_handler(conv_handler_free_venting) # הסר את ההערה אם יש לך כזה
 
