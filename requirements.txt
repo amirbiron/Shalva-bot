@@ -2,3 +2,16 @@ python-telegram-bot==20.0
 python-dotenv==1.0.0
 pymongo[srv]
 google-generativeai
+# Google Generative AI (for Gemini)
+google-generativeai
+
+# Web server for Keep-Alive
+Flask
+
+# Environment variables
+python-dotenv
+
+# Vector Search Libraries (if you use them)
+# sentence-transformers
+# faiss-cpu
+# numpy
