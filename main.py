@@ -1453,6 +1453,13 @@ async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return ConversationHandler.END
 
 # =================================================================
+# ConversationHandler assignments (moved here for correct order)
+# =================================================================
+conv_handler_quick_report = create_quick_report_conversation()
+conv_handler_full_report = create_full_report_conversation()
+conv_handler_venting = create_venting_conversation()
+
+# =================================================================
 # Main Function
 # =================================================================
 
