@@ -287,6 +287,10 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
             "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל פריקה חופשית, לחץ על /start ואז בחר פריקה חופשית.",
             reply_markup=get_main_keyboard()
         )
+    elif text == "🔴 אני במצוקה":
+        keyboard = [[InlineKeyboardButton("לחץ כאן להתחלת תרגול", callback_data='start_panic_flow')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text('כדי להתחיל, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     else:
         await update.message.reply_text(
             "בחר אפשרות מהתפריט למטה:",
@@ -1450,14 +1454,16 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # =================================================================
 
 async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
     keyboard = [[
         InlineKeyboardButton("✅ כן", callback_data="panic_yes_breath"),
         InlineKeyboardButton("⛔️ לא, תודה", callback_data="panic_no_breath"),
     ]]
-    await update.message.reply_text(
-        "אני איתך.\n"
-        "האם תרצה שננשום יחד בקצב 4-4-6?\n\n"
-        "(בכל שלב, אפשר לחזור לתפריט הראשי עם /start)",
+    # כפתור יציאה קבוע
+    keyboard.append([InlineKeyboardButton("🔙 חזור לתפריט הראשי", callback_data="panic_exit")])
+    await query.edit_message_text(
+        text="אני איתך. האם תרצה שננשום יחד בקצב 4-4-6?",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     return ASK_BREATH
@@ -1468,11 +1474,13 @@ async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await query.answer()
 
     if query.data == "panic_yes_breath":
-        await query.edit_message_text("מתחילים לנשום יחד…")
+        stop_button = InlineKeyboardMarkup([[InlineKeyboardButton("⏹️ הפסק והמשך הלאה", callback_data="panic_stop_breath")]])
+        await query.edit_message_text("מתחילים לנשום יחד…\nתוכל להפסיק בכל שלב.", reply_markup=stop_button)
         asyncio.create_task(breathing_cycle(query, context))
         return BREATHING
 
     keyboard = [[InlineKeyboardButton("✅ שטפתי פנים", callback_data="panic_face_done")]]
+    keyboard.append([InlineKeyboardButton("🔙 חזור לתפריט הראשי", callback_data="panic_exit")])
     await query.edit_message_text(
         "אני מציע שתלך לשטוף פנים במים קרים.\nכשתסיים לחץ על הכפתור.",
         reply_markup=InlineKeyboardMarkup(keyboard),
@@ -1483,14 +1491,13 @@ async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def breathing_cycle(query, context):
     chat_id = query.message.chat_id
     bot = context.bot
-    stop_button = InlineKeyboardMarkup([[InlineKeyboardButton("⏹️ הפסק תרגיל", callback_data="panic_stop_breath")]])
     for i in range(3):
         try:
-            await bot.send_message(chat_id, f"מחזור {i+1}:\nשאיפה… 4", reply_markup=stop_button)
+            await bot.send_message(chat_id, f"מחזור {i+1}:\nשאיפה… 4")
             await asyncio.sleep(4)
-            await bot.send_message(chat_id, "החזק… 4", reply_markup=stop_button)
+            await bot.send_message(chat_id, "החזק… 4")
             await asyncio.sleep(4)
-            await bot.send_message(chat_id, "נשיפה… 6", reply_markup=stop_button)
+            await bot.send_message(chat_id, "נשיפה… 6")
             await asyncio.sleep(6)
         except Exception as e:
             logger.error(f"Error in breathing cycle: {e}")
@@ -1621,12 +1628,12 @@ async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 # Panic ConversationHandler
 panic_conv_handler = ConversationHandler(
-    entry_points=[MessageHandler(filters.Regex("^🔴 אני במצוקה$"), panic_entry)],
+    entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
     states={
         ASK_BREATH: [CallbackQueryHandler(decide_breath, pattern="^panic_(yes|no)_breath$")],
         BREATHING: [
             CallbackQueryHandler(handle_scale, pattern="^panic_scale_"),
-            CallbackQueryHandler(face_washed, pattern="^panic_stop_breath$")  # מאפשר להפסיק תרגיל נשימה ולעבור לדירוג
+            CallbackQueryHandler(stop_breathing_and_ask_scale, pattern="^panic_stop_breath$")
         ],
         ASK_WASH: [CallbackQueryHandler(face_washed, pattern="^panic_face_done$")],
         ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
@@ -1636,11 +1643,25 @@ panic_conv_handler = ConversationHandler(
         ],
         EXEC_EXTRA: [CallbackQueryHandler(extra_done, pattern="^panic_done_extra$")],
     },
-    fallbacks=[CommandHandler("start", start)],
+    fallbacks=[CommandHandler("start", start), CallbackQueryHandler(exit_panic, pattern='^panic_exit$')],
     name="panic_conv",
     per_user=True,
     per_chat=True,
 )
+
+# === NEW FUNCTIONS FOR PANIC FEATURE ===
+async def stop_breathing_and_ask_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.delete_message()
+    await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
+    return ASK_SCALE
+
+async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("מובן. חוזרים לתפריט הראשי.")
+    return ConversationHandler.END
 
 # =================================================================
 # Main Function
