@@ -1451,8 +1451,21 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             pass  # אם גם זה נכשל, לא נעשה כלום
 
 # =================================================================
-# --- Panic Feature Functions (גרסה 7 - שיפורי UI ויציבות) ---
+# --- Panic Feature Functions (גרסה 9 - שינוי טקסט כפתור) ---
 # =================================================================
+
+async def suggest_ai_chat_and_end(query) -> int:
+    """שולח את הודעת הסיום הממליצה על שיחה עם AI ומסיים את השיחה."""
+    final_text = (
+        "נגמרו לי ההצעות במאגר, תמיד תוכל ללחוץ על לחצן המצוקה כדי להתחיל סבב נוסף.\n"
+        "ממליץ לך בחום לעבור ללחצן \"זקוק/ה לאוזן קשבת?\", תוכל לנהל שיחה עם סוכן בינה מלאכותית אדיב, מכיל ואמפתי 🩵"
+    )
+    if hasattr(query, 'edit_message_text'):
+        await query.edit_message_text(text=final_text)
+    else:
+        await context.bot.send_message(chat_id=query.effective_chat.id, text=final_text)
+
+    return ConversationHandler.END
 
 async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -1488,7 +1501,6 @@ async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         return BREATHING
 
-    # **>>> כאן בוצע השינוי שביקשת <<<**
     keyboard = [
         [InlineKeyboardButton("✅ ביצעתי", callback_data="panic_face_done")],
         [InlineKeyboardButton("🔄 הצע טכניקות נוספות", callback_data="panic_more_extra")],
@@ -1587,13 +1599,9 @@ async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         )
         return OFFER_EXTRA
 
-    context.user_data["attempts"] += 1
+    context.user_data["attempts"] = context.user_data.get("attempts", 0) + 1
     if context.user_data["attempts"] >= 2:
-        await query.edit_message_text(
-            "נגמרו לי ההצעות במאגר, תמיד תוכל ללחוץ על לחצן המצוקה כדי להתחיל סבב נוסף.\n"
-            "ממליץ לך בחום לעבור ללחצן \"זקוק/ה לאוזן קשבת?\", תוכל לנהל שיחה עם סוכן בינה מלאכותית אדיב, מכיל ואמפתי 🩵"
-        )
-        return ConversationHandler.END
+        return await suggest_ai_chat_and_end(query)
 
     return await offer_extra(update, context)
 
@@ -1612,16 +1620,14 @@ async def offer_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     
     if len(remaining_keys) > 2:
         buttons.append([InlineKeyboardButton("🔄 הצע טכניקות נוספות", callback_data="panic_more_extra")])
+    else:
+        # **>>> כאן בוצע השינוי שביקשת <<<**
+        buttons.append([InlineKeyboardButton("⏩ לדלג", callback_data="panic_skip_to_end")])
         
     message_text = "בוא ננסה טכניקה נוספת. איזו מהבאות תרצה לנסות?"
 
-    try:
-        if hasattr(update, 'callback_query') and update.callback_query:
-            await update.callback_query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(buttons))
-        else:
-            await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(buttons))
-    except Exception as e:
-        logger.error(f"Error in offer_extra: {e}")
+    query = update.callback_query if hasattr(update, 'callback_query') and update.callback_query else update
+    await query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(buttons))
 
     return OFFER_EXTRA
 
@@ -1631,14 +1637,10 @@ async def start_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     key = query.data.split("_")[2]
     _, intro = EXTRA_TECHNIQUES[key]
     
-    try:
-        await query.edit_message_text(
-            f"{intro}\nכשתסיים, לחץ על הכפתור.",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ ביצעתי", callback_data="panic_done_extra")]])
-        )
-    except Exception as e:
-        logger.error(f"Error in start_extra: {e}")
-
+    await query.edit_message_text(
+        f"{intro}\nכשתסיים, לחץ על הכפתור.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ ביצעתי", callback_data="panic_done_extra")]])
+    )
     return EXEC_EXTRA
 
 async def extra_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1660,13 +1662,7 @@ async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await query.edit_message_text("שמחתי לעזור. אני כאן תמיד כשתצטרך. 💙")
         return ConversationHandler.END
     
-    # אם לחץ על "עוד תרגיל", קוראים ל-offer_extra
-    # חשוב לערוך את ההודעה הנוכחית ולא לשלוח חדשה
-    try:
-        await offer_extra(update.callback_query, context)
-    except Exception:
-        # במקרה שהקריאה נכשלת (כי offer_extra מצפה ל-update ולא ל-query), ננסה עם update
-        await offer_extra(update, context)
+    await offer_extra(query, context)
     return OFFER_EXTRA
 
 async def fallback_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1687,7 +1683,7 @@ async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.user_data.pop(key, None)
     return ConversationHandler.END
 
-
+# הגדרת ה-ConversationHandler עבור פיצ'ר המצוקה
 panic_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
     states={
@@ -1696,15 +1692,15 @@ panic_conv_handler = ConversationHandler(
             CallbackQueryHandler(stop_breathing, pattern="^panic_stop_breath$"),
             CallbackQueryHandler(handle_scale, pattern="^panic_scale_")
         ],
-        # **>>> כאן בוצע השינוי למצב ASK_WASH <<<**
         ASK_WASH: [
             CallbackQueryHandler(face_washed, pattern="^panic_face_done$"),
-            CallbackQueryHandler(extra_choice, pattern="^panic_more_extra$"), # מטפל בכפתור "הצע עוד"
+            CallbackQueryHandler(extra_choice, pattern="^panic_more_extra$"),
         ],
         ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
         OFFER_EXTRA: [
             CallbackQueryHandler(start_extra, pattern="^panic_extra_"),
             CallbackQueryHandler(extra_choice, pattern="^panic_(enough|more_extra)$"),
+            CallbackQueryHandler(suggest_ai_chat_and_end, pattern="^panic_skip_to_end$"),
         ],
         EXEC_EXTRA: [CallbackQueryHandler(extra_done, pattern="^panic_done_extra$")],
     },
