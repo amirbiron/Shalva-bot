@@ -308,9 +308,13 @@ async def start_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data['report_type'] = 'quick'
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
+    # מקלדת לניווט – נשמרת לאורך השיחה כדי למנוע היעלמות כפתורים
+    keyboard = [[InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]]
+    markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
         "⚡ דיווח מהיר\n\n🔄 שלב 1/2: תיאור המצב\n\nמה קורה עכשיו? (תיאור קצר)",
-        reply_markup=None
+        reply_markup=markup
     )
     return QUICK_DESC
 
@@ -394,9 +398,13 @@ async def start_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
     progress = get_progress_indicator(1, 5)
+    # מקלדת לניווט – נשמרת לאורך השיחה כדי למנוע היעלמות כפתורים
+    keyboard = [[InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]]
+    markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
         f"🔍 דיווח מלא\n\n{progress} תיאור המצב\n\nמה גורם לחרדה עכשיו? (תאר במפורט)",
-        reply_markup=None
+        reply_markup=markup
     )
     return FULL_DESC
 
@@ -530,9 +538,13 @@ async def start_free_venting(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await ensure_user_in_db(update)
     context.user_data.clear()
     
+    # מקלדת לניווט – נשמרת לאורך השיחה כדי למנוע היעלמות כפתורים
+    keyboard = [[InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]]
+    markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
         "🗣️ פריקה חופשית\n\nכתב כל מה שאתה מרגיש. אין שאלות, אין לחץ.\nרק תן לזה לצאת...",
-        reply_markup=None
+        reply_markup=markup
     )
     return FREE_VENTING
 
