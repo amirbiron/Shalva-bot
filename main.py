@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pymongo
 import google.generativeai as genai
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler, RedisPersistence
 from collections import Counter
 import asyncio
 from datetime import datetime
@@ -32,6 +32,9 @@ if GEMINI_API_KEY:
 # הגדרת מצבי שיחה
 # דיווח מהיר
 QUICK_DESC, QUICK_ANXIETY = range(2)
+
+# מצב ברירת מחדל לאחר אתחול גרסה
+CHOOSING = -1  # מצב כללי לבחירה ראשונית
 
 # דיווח מלא  
 FULL_DESC, FULL_ANXIETY, FULL_LOCATION, FULL_PEOPLE, FULL_WEATHER = range(5)
@@ -656,9 +659,12 @@ def create_quick_report_conversation():
             QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^anxiety_")]
         },
         fallbacks=[
-            CommandHandler("start", cancel_quick_report),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_quick_report)
-        ]
+            CommandHandler("start", start),
+            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_quick_report),
+            MessageHandler(filters.ALL, unknown_input)
+        ],
+        name="quick_report_conv",
+        persistent=True
     )
 
 def create_full_report_conversation():
@@ -680,9 +686,12 @@ def create_full_report_conversation():
             FULL_WEATHER: [CallbackQueryHandler(complete_full_report, pattern="^weather_")]
         },
         fallbacks=[
-            CommandHandler("start", cancel_full_report),
+            CommandHandler("start", start),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report),
-        ]
+            MessageHandler(filters.ALL, unknown_input)
+        ],
+        name="full_report_conv",
+        persistent=True
     )
 
 def create_venting_conversation():
@@ -701,9 +710,12 @@ def create_venting_conversation():
             VENTING_SAVE: [CallbackQueryHandler(save_venting_choice, pattern="^save_venting_")]
         },
         fallbacks=[
-            CommandHandler("start", cancel_venting),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting)
-        ]
+            CommandHandler("start", start),
+            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting),
+            MessageHandler(filters.ALL, unknown_input)
+        ],
+        name="venting_conv",
+        persistent=True
     )
 
 def create_support_conversation():
@@ -711,9 +723,11 @@ def create_support_conversation():
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(start_support_chat, pattern='^support_chat$')],
         states={SUPPORT_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message)]},
-        fallbacks=[CommandHandler('end_chat', end_support_chat), CommandHandler('start', start)],
+        fallbacks=[CommandHandler('end_chat', end_support_chat), CommandHandler('start', start), MessageHandler(filters.ALL, unknown_input)],
         per_user=True,
         per_chat=True,
+        name="support_conv",
+        persistent=True,
     )
 
 # =================================================================
@@ -1567,11 +1581,13 @@ async def ask_scale_if_needed(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get('scale_asked', False):
         context.user_data['scale_asked'] = True
         question = "איך אתה מרגיש עכשיו, זה עזר?"
-        scale_kb = [[InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(0, 11)]]
-        
+        scale_kb = [
+            [InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}_v2") for i in range(1, 6)],
+            [InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}_v2") for i in range(6, 11)]
+        ]
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{question}\nדרג מ-0 (רגוע לחלוטין) עד 10 (הכי חרד שאפשר):",
+            text=f"{question}\nדרג מ-1 (רגוע לחלוטין) עד 10 (הכי חרד שאפשר):",
             reply_markup=InlineKeyboardMarkup(scale_kb)
         )
 
@@ -1696,7 +1712,7 @@ panic_conv_handler = ConversationHandler(
             CallbackQueryHandler(face_washed, pattern="^panic_face_done$"),
             CallbackQueryHandler(extra_choice, pattern="^panic_more_extra$"),
         ],
-        ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
+        ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+(_v2)?$")],
         OFFER_EXTRA: [
             CallbackQueryHandler(start_extra, pattern="^panic_extra_"),
             CallbackQueryHandler(extra_choice, pattern="^panic_(enough|more_extra)$"),
@@ -1706,11 +1722,13 @@ panic_conv_handler = ConversationHandler(
     },
     fallbacks=[
         CommandHandler("start", fallback_start),
-        CallbackQueryHandler(exit_panic, pattern='^panic_exit$')
+        CallbackQueryHandler(exit_panic, pattern='^panic_exit$'),
+        MessageHandler(filters.ALL, unknown_input)
     ],
     name="panic_conv",
     per_user=True,
     per_chat=True,
+    persistent=True,
 )
 
 # =================================================================
@@ -1724,7 +1742,7 @@ def main():
         init_database()
         
         # יצירת האפליקציה
-        application = Application.builder().token(BOT_TOKEN).build()
+        application = Application.builder().token(BOT_TOKEN).persistence(RedisPersistence.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))).build()
         
         # הוספת ConversationHandlers - סדר חשוב!
         application.add_handler(panic_conv_handler)  # רישום panic_conv_handler קודם
@@ -1741,6 +1759,10 @@ def main():
         # הוספת error handler
         application.add_error_handler(error_handler)
         
+        # הוספת בדיקת גרסת סכימה – חייב להיות בקבוצה מוקדמת כדי לרוץ לפני כל שאר ה-handlers
+        application.add_handler(MessageHandler(filters.ALL, ensure_schema_version), group=0)
+        application.add_handler(CallbackQueryHandler(ensure_schema_version), group=0)
+        
         # הרצת הבוט
         logger.info("🚀 הבוט החדש עם ConversationHandler מתחיל לרוץ...")
         print("✅ הבוט פעיל עם ConversationHandler! לחץ Ctrl+C לעצירה")
@@ -1750,6 +1772,33 @@ def main():
         logger.error(f"שגיאה קריטית בהפעלת הבוט: {e}")
         print(f"❌ שגיאה קריטית: {e}")
         raise
+
+async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """תגובה לברירה לא מוכרת בתוך שיחה"""
+    if update.message:
+        await update.message.reply_text("לא הבנתי, נסה שוב או לחץ /start")
+    elif update.callback_query:
+        await update.callback_query.answer()
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="לא הבנתי, נסה שוב או לחץ /start")
+    return
+
+# ==============================================
+#   Schema version middleware
+# ==============================================
+
+async def ensure_schema_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """מבטיח שהמבנה המעודכן נשמר ומנקה נתונים במידת הצורך."""
+    if context.user_data.get("__v") != 2:
+        context.user_data.clear()
+        context.user_data["__v"] = 2
+        try:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="עודכנתי לגרסה חדשה, בוא נתחיל מחדש עם /start"
+            )
+        except Exception:
+            pass  # ייתכן שלא ניתן לשלוח הודעה במצבים מסוימים
+        return CHOOSING
 
 if __name__ == '__main__':
     main()
