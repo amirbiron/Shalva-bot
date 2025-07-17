@@ -1638,6 +1638,13 @@ async def stop_breathing_and_ask_scale(update: Update, context: ContextTypes.DEF
     # Transitions to the state that waits for the scale answer
     return ASK_SCALE
 
+async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Ends the panic conversation gracefully."""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("מובן. חוזרים לתפריט הראשי.")
+    return ConversationHandler.END
+
 # Panic ConversationHandler
 panic_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
@@ -1660,12 +1667,6 @@ panic_conv_handler = ConversationHandler(
     per_user=True,
     per_chat=True,
 )
-
-async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text("מובן. חוזרים לתפריט הראשי.")
-    return ConversationHandler.END
 
 # =================================================================
 # Main Function
