@@ -1626,6 +1626,18 @@ async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return OFFER_EXTRA
 
 
+# --- newly added: stop breathing helper before ConversationHandler ---
+async def stop_breathing_and_ask_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stops the breathing exercise and moves to the scaling question."""
+    query = update.callback_query
+    await query.answer()
+    # Deletes the message with the "Stop exercise" button
+    await query.delete_message()
+    # Asks for the anxiety scale
+    await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
+    # Transitions to the state that waits for the scale answer
+    return ASK_SCALE
+
 # Panic ConversationHandler
 panic_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
@@ -1648,14 +1660,6 @@ panic_conv_handler = ConversationHandler(
     per_user=True,
     per_chat=True,
 )
-
-# === NEW FUNCTIONS FOR PANIC FEATURE ===
-async def stop_breathing_and_ask_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    await query.delete_message()
-    await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
-    return ASK_SCALE
 
 async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
