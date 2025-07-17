@@ -8,6 +8,7 @@ from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboard
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
 import google.generativeai as genai
+import asyncio
 
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -29,6 +30,11 @@ FULL_DESC, FULL_ANXIETY, FULL_LOCATION, FULL_PEOPLE, FULL_WEATHER = range(5)
 
 # פריקה חופשית
 FREE_VENTING, VENTING_SAVE = range(2)
+
+# -----------------------------------------------------------------
+# מצב "אני במצוקה" (תרגול נשימה מהיר)
+# -----------------------------------------------------------------
+ASK_BREATH, BREATHING, ASK_SCALE = range(3)
 
 # --- Gemini API Configuration (NEW) ---
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -171,6 +177,27 @@ def get_progress_indicator(current_step, total_steps):
     empty = "○" * (total_steps - current_step)
     return f"{filled}{empty} ({current_step}/{total_steps})"
 
+def get_panic_scale_keyboard():
+    """Inline keyboard with panic_scale_X callback data (1-10)."""
+    keyboard = []
+    row1, row2 = [], []
+    for i in range(1, 6):
+        row1.append(InlineKeyboardButton(f"{i}", callback_data=f"panic_scale_{i}"))
+    for i in range(6, 11):
+        row2.append(InlineKeyboardButton(f"{i}", callback_data=f"panic_scale_{i}"))
+    keyboard.append(row1)
+    keyboard.append(row2)
+    return InlineKeyboardMarkup(keyboard)
+
+async def ask_scale_generic(bot, chat_id: int, *, is_first_time: bool = False):
+    """Sends a generic ask-scale message using panic-specific keyboard."""
+    intro = "בוא נבדוק איך אתה מרגיש עכשיו.\n" if is_first_time else "נעדכן שוב את רמת החרדה שלך.\n"
+    await bot.send_message(
+        chat_id=chat_id,
+        text=intro + "באיזו רמת חרדה אתה כעת? (1-10)",
+        reply_markup=get_panic_scale_keyboard()
+    )
+
 # =================================================================
 # טיפול בתפריט במהלך שיחות
 # =================================================================
@@ -192,6 +219,10 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
         await show_help(update, context)
     elif text == "⚙️ הגדרות":
         await show_settings_menu(update, context)
+    elif text == "🔴 אני במצוקה":
+        keyboard = [[InlineKeyboardButton("לחץ כאן להתחלת תרגול", callback_data='start_panic_flow')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text('כדי להתחיל, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     
     # יציאה מהשיחה
     return ConversationHandler.END
@@ -283,6 +314,10 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
             "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל פריקה חופשית, לחץ על /start ואז בחר פריקה חופשית.",
             reply_markup=get_main_keyboard()
         )
+    elif text == "🔴 אני במצוקה":
+        keyboard = [[InlineKeyboardButton("לחץ כאן להתחלת תרגול", callback_data='start_panic_flow')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text('כדי להתחיל, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     else:
         await update.message.reply_text(
             "בחר אפשרות מהתפריט למטה:",
@@ -657,6 +692,25 @@ def create_venting_conversation():
         ]
     )
 
+def create_panic_conversation():
+    return ConversationHandler(
+        entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
+        states={
+            ASK_BREATH: [CallbackQueryHandler(decide_breath, pattern="^panic_(yes|no)_breath$")],
+            BREATHING: [
+                CallbackQueryHandler(handle_scale, pattern="^panic_scale_"),
+                CallbackQueryHandler(stop_breathing_and_ask_scale, pattern="^panic_stop_breath$")
+            ],
+            ASK_SCALE: [
+                CallbackQueryHandler(handle_scale, pattern="^panic_scale_"),
+                CallbackQueryHandler(extra_done, pattern="^extra_done$")
+            ],
+        },
+        fallbacks=[CommandHandler("start", cancel_panic)],
+        per_user=True,
+        per_chat=True,
+    )
+
 # =================================================================
 # Callback handlers כלליים
 # =================================================================
@@ -699,6 +753,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await show_reminder_settings(query, context)
     elif data == "confirm_reset":
         await reset_user_data(query, context)
+    elif data == "start_panic_flow":
+        await panic_entry(update, context)
 
 # =================================================================
 # פונקציות עזר ותצוגה
@@ -1456,12 +1512,128 @@ async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         
     return ConversationHandler.END
 
+# -----------------------------------------------------------------
+#              פונקציות שיחה – "אני במצוקה"
+# -----------------------------------------------------------------
+
+async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point to the panic flow – triggered from inline button."""
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = [
+        [InlineKeyboardButton("✅ כן, בוא ננשום", callback_data="panic_yes_breath")],
+        [InlineKeyboardButton("⛔️ לא, תודה", callback_data="panic_no_breath")],
+        [InlineKeyboardButton("🔙 חזור לתפריט הראשי", callback_data="panic_exit")]
+    ]
+    await query.edit_message_text(
+        text="אני איתך. האם תרצה שננשום יחד בקצב 4-4-6?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    return ASK_BREATH
+
+async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles user's decision whether to start breathing exercise."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "panic_yes_breath":
+        # Create stop button
+        stop_button = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⏹️ הפסק והמשך הלאה", callback_data="panic_stop_breath")]]
+        )
+        await query.edit_message_text(
+            "מתחילים לנשום יחד…\nתוכל להפסיק את התרגיל בכל שלב.",
+            reply_markup=stop_button,
+        )
+        # Launch breathing cycle task
+        breathing_task = asyncio.create_task(breathing_cycle(query, context))
+        context.user_data['breathing_task'] = breathing_task
+        return BREATHING
+    else:  # panic_no_breath
+        await query.delete_message()
+        await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
+        return ASK_SCALE
+
+async def breathing_cycle(query, context):
+    """Simple infinite breathing cues loop until cancelled."""
+    bot = context.bot
+    chat_id = query.message.chat_id
+    try:
+        while True:
+            await bot.send_message(chat_id, "שאפו 4 שניות…")
+            await asyncio.sleep(4)
+            await bot.send_message(chat_id, "החזיקו 4 שניות…")
+            await asyncio.sleep(4)
+            await bot.send_message(chat_id, "נשפו 6 שניות…")
+            await asyncio.sleep(6)
+    except asyncio.CancelledError:
+        # Graceful exit when task is cancelled
+        pass
+
+async def stop_breathing_and_ask_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Stops breathing task and asks for anxiety scale."""
+    query = update.callback_query
+    await query.answer()
+
+    # Cancel breathing task if exists
+    if 'breathing_task' in context.user_data:
+        context.user_data['breathing_task'].cancel()
+        del context.user_data['breathing_task']
+
+    await query.delete_message()
+    await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
+    return ASK_SCALE
+
+async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles anxiety scale ratings – allows repeated ratings."""
+    query = update.callback_query
+    await query.answer()
+    level_str = query.data.replace("panic_scale_", "")
+    try:
+        level = int(level_str)
+    except ValueError:
+        level = None
+    await query.delete_message()
+
+    # Store history
+    history = context.user_data.get('scale_history', [])
+    if level is not None:
+        history.append(level)
+        context.user_data['scale_history'] = history
+
+    # Simple response
+    await query.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=f"✅ תודה, דירגת את רמת החרדה שלך {level}/10. תוכל לדרג שוב במידת הצורך.",
+        reply_markup=get_panic_scale_keyboard()
+    )
+    return ASK_SCALE
+
+async def extra_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handles 'ביצעתי' button – moves back to scale question."""
+    query = update.callback_query
+    await query.answer()
+    await query.delete_message()
+    await ask_scale_generic(query.bot, query.message.chat_id)
+    return ASK_SCALE
+
+async def cancel_panic(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancels the panic conversation."""
+    context.user_data.clear()
+    await update.message.reply_text(
+        "❌ התרגול בוטל. אני כאן כשתצטרך.",
+        reply_markup=get_main_keyboard()
+    )
+    return ConversationHandler.END
+
 # =================================================================
 # ConversationHandler assignments (moved here for correct order)
 # =================================================================
 conv_handler_quick_report = create_quick_report_conversation()
 conv_handler_full_report = create_full_report_conversation()
 conv_handler_venting = create_venting_conversation()
+conv_handler_panic = create_panic_conversation()
 
 # =================================================================
 # Main Function
@@ -1480,7 +1652,7 @@ def main() -> None:
     # של_3: רישום כל ה-ConversationHandlers ראשונים!
     # ודא ששמות המשתנים כאן תואמים לשמות בקוד שלך
     application.add_handler(conv_handler_full_report) # השם שתוקן מהשגיאה הקודמת
-    # application.add_handler(conv_handler_reporting) # הסר את ההערה אם יש לך כזה
+    application.add_handler(conv_handler_panic)  # רישום שיחת "אני במצוקה"
     
     # שלב 4: רישום מנהלי פקודות ראשיים
     application.add_handler(CommandHandler("start", start)) # שימוש בשם הנכון 'start'
