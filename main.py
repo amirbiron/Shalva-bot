@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pymongo
 import google.generativeai as genai
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler, PicklePersistence
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
 import asyncio
 from datetime import datetime
@@ -32,9 +32,6 @@ if GEMINI_API_KEY:
 # הגדרת מצבי שיחה
 # דיווח מהיר
 QUICK_DESC, QUICK_ANXIETY = range(2)
-
-# מצב ברירת מחדל לאחר אתחול גרסה
-CHOOSING = -1  # מצב כללי לבחירה ראשונית
 
 # דיווח מלא  
 FULL_DESC, FULL_ANXIETY, FULL_LOCATION, FULL_PEOPLE, FULL_WEATHER = range(5)
@@ -156,10 +153,10 @@ def get_anxiety_level_keyboard():
     row2 = []
     
     for i in range(1, 6):
-        row1.append(InlineKeyboardButton(str(i), callback_data=f"RATE_{i}"))
+        row1.append(InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}"))
     
     for i in range(6, 11):
-        row2.append(InlineKeyboardButton(str(i), callback_data=f"RATE_{i}"))
+        row2.append(InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}"))
     
     keyboard.append(row1)
     keyboard.append(row2)
@@ -186,8 +183,6 @@ def get_progress_indicator(current_step, total_steps):
 async def handle_menu_during_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בלחיצות על תפריט במהלך שיחה פעילה"""
     await ensure_user_in_db(update)
-    # איפוס דגל זרימה פעיל
-    reset_flow(context)
     text = update.message.text
     
     # ניקוי הנתונים הזמניים
@@ -278,6 +273,21 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
         keyboard = [[InlineKeyboardButton("לחץ כאן כדי להתחיל בשיחה אישית", callback_data='support_chat')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text('כדי להגן על פרטיותך ולהיכנס למצב שיחה, אנא לחץ על הכפתור:', reply_markup=reply_markup)
+    elif text == "⚡ דיווח מהיר":
+        await update.message.reply_text(
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מהיר.",
+            reply_markup=get_main_keyboard()
+        )
+    elif text == "🔍 דיווח מלא":
+        await update.message.reply_text(
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מלא.",
+            reply_markup=get_main_keyboard()
+        )
+    elif text == "🗣️ פריקה חופשית":
+        await update.message.reply_text(
+            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל פריקה חופשית, לחץ על /start ואז בחר פריקה חופשית.",
+            reply_markup=get_main_keyboard()
+        )
     elif text == "🔴 אני במצוקה":
         keyboard = [[InlineKeyboardButton("לחץ כאן להתחלת תרגול", callback_data='start_panic_flow')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -288,24 +298,6 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup=get_main_keyboard()
         )
 
-async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """תגובה לברירה לא מוכרת בתוך שיחה"""
-    if update.message:
-        await update.message.reply_text("לא הבנתי, נסה שוב או לחץ /start")
-    elif update.callback_query:
-        await update.callback_query.answer()
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="לא הבנתי, נסה שוב או לחץ /start")
-    return
-
-# ----------------------------------------------------------------
-# DEBUG: קולט callback שלא נתפס
-# ----------------------------------------------------------------
-async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """DEBUG handler to log unmatched callback queries."""
-    query = update.callback_query
-    await query.answer()
-    logger.warning(f"DEBUG: Unhandled callback data: {query.data}")
-
 # =================================================================
 # דיווח מהיר - ConversationHandler
 # =================================================================
@@ -313,15 +305,7 @@ async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def start_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת דיווח מהיר"""
     await ensure_user_in_db(update)
-    # --- ניהול דגל זרימה ---
-    if context.user_data.get("active_flow") == "quick":
-        pass  # ממשיך כרגיל
-    elif context.user_data.get("active_flow"):
-        await update.message.reply_text("💡 עברת ל'דיווח מהיר' – הפעולה הקודמת בוטלה.")
-        reset_flow(context)
-    context.user_data["active_flow"] = "quick"
-    
-    # הכנת נתונים
+    context.user_data.clear()  # ניקוי נתונים קודמים
     context.user_data['report_type'] = 'quick'
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
@@ -386,14 +370,12 @@ async def complete_quick_report(update: Update, context: ContextTypes.DEFAULT_TY
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     
-    # ניקוי דגל זרימה ונתונים
-    reset_flow(context)
+    # ניקוי נתונים
     context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ביטול דיווח מהיר"""
-    reset_flow(context)
     context.user_data.clear()
     await update.message.reply_text(
         "❌ דיווח בוטל. אפשר להתחיל מחדש בכל עת.",
@@ -408,14 +390,7 @@ async def cancel_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def start_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת דיווח מלא"""
     await ensure_user_in_db(update)
-    # --- ניהול דגל זרימה ---
-    if context.user_data.get("active_flow") == "full":
-        pass
-    elif context.user_data.get("active_flow"):
-        await update.message.reply_text("💡 עברת ל'דיווח מלא' – הפעולה הקודמת בוטלה.")
-        reset_flow(context)
-    context.user_data["active_flow"] = "full"
-    
+    context.user_data.clear()
     context.user_data['report_type'] = 'full'
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
@@ -534,13 +509,12 @@ async def complete_full_report(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     
-    reset_flow(context)
+    # ניקוי נתונים
     context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ביטול דיווח מלא"""
-    reset_flow(context)
     context.user_data.clear()
     await update.message.reply_text(
         "❌ דיווח בוטל. אפשר להתחיל מחדש בכל עת.",
@@ -555,13 +529,7 @@ async def cancel_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def start_free_venting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת פריקה חופשית"""
     await ensure_user_in_db(update)
-    # --- ניהול דגל זרימה ---
-    if context.user_data.get("active_flow") == "venting":
-        pass
-    elif context.user_data.get("active_flow"):
-        await update.message.reply_text("💡 עברת ל'פריקה חופשית' – הפעולה הקודמת בוטלה.")
-        reset_flow(context)
-    context.user_data["active_flow"] = "venting"
+    context.user_data.clear()
     
     await update.message.reply_text(
         "🗣️ פריקה חופשית\n\nכתב כל מה שאתה מרגיש. אין שאלות, אין לחץ.\nרק תן לזה לצאת...",
@@ -614,13 +582,12 @@ async def save_venting_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     
-    reset_flow(context)
+    # ניקוי נתונים
     context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel_venting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ביטול פריקה חופשית"""
-    reset_flow(context)
     context.user_data.clear()
     await update.message.reply_text(
         "❌ פריקה בוטלה. אפשר להתחיל מחדש בכל עת.",
@@ -637,14 +604,8 @@ EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט 
 async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    # --- ניהול דגל זרימה ---
-    if context.user_data.get("active_flow") != "support" and context.user_data.get("active_flow"):
-        reset_flow(context)
-    context.user_data["active_flow"] = "support"
-    
     if not GEMINI_API_KEY:
         await query.edit_message_text("שירות השיחה אינו זמין כרגע.")
-        reset_flow(context)
         return ConversationHandler.END
 
     context.user_data['gemini_model'] = genai.GenerativeModel('gemini-1.5-flash')
@@ -673,7 +634,6 @@ async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text("שמחתי להיות כאן בשבילך. אני תמיד כאן אם תצטרך אותי שוב. ❤️\nכדי לחזור לתפריט הראשי, הקלד /start.")
     if 'chat_history' in context.user_data: del context.user_data['chat_history']
     if 'gemini_model' in context.user_data: del context.user_data['gemini_model']
-    reset_flow(context)
     return ConversationHandler.END
 
 # =================================================================
@@ -693,19 +653,12 @@ def create_quick_report_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_quick_description)
             ],
-            QUICK_ANXIETY: [
-                CallbackQueryHandler(complete_quick_report, pattern="^RATE_"),
-                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
-            ]
+            QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^anxiety_")]
         },
         fallbacks=[
-            CommandHandler("start", start),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_quick_report),
-            MessageHandler(filters.ALL, unknown_input)
-        ],
-        name="quick_report_conv",
-        per_message=True,
-        persistent=True
+            CommandHandler("start", cancel_quick_report),
+            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_quick_report)
+        ]
     )
 
 def create_full_report_conversation():
@@ -721,31 +674,15 @@ def create_full_report_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_full_description)
             ],
-            FULL_ANXIETY: [
-                CallbackQueryHandler(get_full_anxiety_level, pattern="^RATE_"),
-                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
-            ],
-            FULL_LOCATION: [
-                CallbackQueryHandler(get_full_location, pattern="^location_"),
-                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
-            ],
-            FULL_PEOPLE: [
-                CallbackQueryHandler(get_full_people, pattern="^people_"),
-                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
-            ],
-            FULL_WEATHER: [
-                CallbackQueryHandler(complete_full_report, pattern="^weather_"),
-                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
-            ]
+            FULL_ANXIETY: [CallbackQueryHandler(get_full_anxiety_level, pattern="^anxiety_")],
+            FULL_LOCATION: [CallbackQueryHandler(get_full_location, pattern="^location_")],
+            FULL_PEOPLE: [CallbackQueryHandler(get_full_people, pattern="^people_")],
+            FULL_WEATHER: [CallbackQueryHandler(complete_full_report, pattern="^weather_")]
         },
         fallbacks=[
-            CommandHandler("start", start),
+            CommandHandler("start", cancel_full_report),
             MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report),
-            MessageHandler(filters.ALL, unknown_input)
-        ],
-        name="full_report_conv",
-        per_message=True,
-        persistent=True
+        ]
     )
 
 def create_venting_conversation():
@@ -761,19 +698,12 @@ def create_venting_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_venting_content)
             ],
-            VENTING_SAVE: [
-                CallbackQueryHandler(save_venting_choice, pattern="^save_venting_"),
-                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
-            ]
+            VENTING_SAVE: [CallbackQueryHandler(save_venting_choice, pattern="^save_venting_")]
         },
         fallbacks=[
-            CommandHandler("start", start),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting),
-            MessageHandler(filters.ALL, unknown_input)
-        ],
-        name="venting_conv",
-        per_message=True,
-        persistent=True
+            CommandHandler("start", cancel_venting),
+            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting)
+        ]
     )
 
 def create_support_conversation():
@@ -781,12 +711,9 @@ def create_support_conversation():
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(start_support_chat, pattern='^support_chat$')],
         states={SUPPORT_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message)]},
-        fallbacks=[CommandHandler('end_chat', end_support_chat), CommandHandler('start', start), MessageHandler(filters.ALL, unknown_input)],
+        fallbacks=[CommandHandler('end_chat', end_support_chat), CommandHandler('start', start)],
         per_user=True,
         per_chat=True,
-        name="support_conv",
-        per_message=True,
-        persistent=True,
     )
 
 # =================================================================
@@ -1640,13 +1567,11 @@ async def ask_scale_if_needed(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get('scale_asked', False):
         context.user_data['scale_asked'] = True
         question = "איך אתה מרגיש עכשיו, זה עזר?"
-        scale_kb = [
-            [InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}_v2") for i in range(1, 6)],
-            [InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}_v2") for i in range(6, 11)]
-        ]
+        scale_kb = [[InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(0, 11)]]
+        
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{question}\nדרג מ-1 (רגוע לחלוטין) עד 10 (הכי חרד שאפשר):",
+            text=f"{question}\nדרג מ-0 (רגוע לחלוטין) עד 10 (הכי חרד שאפשר):",
             reply_markup=InlineKeyboardMarkup(scale_kb)
         )
 
@@ -1771,7 +1696,7 @@ panic_conv_handler = ConversationHandler(
             CallbackQueryHandler(face_washed, pattern="^panic_face_done$"),
             CallbackQueryHandler(extra_choice, pattern="^panic_more_extra$"),
         ],
-        ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+(_v2)?$")],
+        ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
         OFFER_EXTRA: [
             CallbackQueryHandler(start_extra, pattern="^panic_extra_"),
             CallbackQueryHandler(extra_choice, pattern="^panic_(enough|more_extra)$"),
@@ -1781,14 +1706,11 @@ panic_conv_handler = ConversationHandler(
     },
     fallbacks=[
         CommandHandler("start", fallback_start),
-        CallbackQueryHandler(exit_panic, pattern='^panic_exit$'),
-        MessageHandler(filters.ALL, unknown_input)
+        CallbackQueryHandler(exit_panic, pattern='^panic_exit$')
     ],
     name="panic_conv",
     per_user=True,
     per_chat=True,
-    per_message=True,
-    persistent=True,
 )
 
 # =================================================================
@@ -1802,13 +1724,7 @@ def main():
         init_database()
         
         # יצירת האפליקציה
-        persistence = PicklePersistence(filepath="bot_data.pkl")
-        application = (
-            Application.builder()
-            .token(BOT_TOKEN)
-            .persistence(persistence)
-            .build()
-        )
+        application = Application.builder().token(BOT_TOKEN).build()
         
         # הוספת ConversationHandlers - סדר חשוב!
         application.add_handler(panic_conv_handler)  # רישום panic_conv_handler קודם
@@ -1825,10 +1741,6 @@ def main():
         # הוספת error handler
         application.add_error_handler(error_handler)
         
-        # הוספת בדיקת גרסת סכימה – חייב להיות בקבוצה מוקדמת כדי לרוץ לפני כל שאר ה-handlers
-        application.add_handler(MessageHandler(filters.ALL, ensure_schema_version), group=0)
-        application.add_handler(CallbackQueryHandler(ensure_schema_version), group=0)
-        
         # הרצת הבוט
         logger.info("🚀 הבוט החדש עם ConversationHandler מתחיל לרוץ...")
         print("✅ הבוט פעיל עם ConversationHandler! לחץ Ctrl+C לעצירה")
@@ -1838,24 +1750,6 @@ def main():
         logger.error(f"שגיאה קריטית בהפעלת הבוט: {e}")
         print(f"❌ שגיאה קריטית: {e}")
         raise
-
-# ==============================================
-#   Schema version middleware
-# ==============================================
-
-async def ensure_schema_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """מבטיח שהמבנה המעודכן נשמר ומנקה נתונים במידת הצורך."""
-    if context.user_data.get("__v") != 2:
-        context.user_data.clear()
-        context.user_data["__v"] = 2
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="עודכנתי לגרסה חדשה, בוא נתחיל מחדש עם /start"
-            )
-        except Exception:
-            pass  # ייתכן שלא ניתן לשלוח הודעה במצבים מסוימים
-        return CHOOSING
 
 if __name__ == '__main__':
     main()
