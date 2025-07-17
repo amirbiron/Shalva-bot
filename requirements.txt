@@ -1,5 +1,6 @@
 # Telegram Bot Library
-python-telegram-bot[job-queue]
+python-telegram-bot[job-queue,redis]
+redis
 
 # Google Generative AI (for Gemini)
 google-generativeai
