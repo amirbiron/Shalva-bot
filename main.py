@@ -37,6 +37,9 @@ FREE_VENTING, VENTING_SAVE = range(2)
 # שיחת תמיכה
 SUPPORT_CHAT = range(17)
 
+# מצוקה מיידית
+DISTRESS_BREATHING_CHOICE, DISTRESS_BREATHING_EXERCISE, DISTRESS_FACE_WASH, DISTRESS_AFTER_EXERCISE, DISTRESS_SECOND_EXERCISE, DISTRESS_SECOND_AFTER = range(6)
+
 # הגדרת בסיס הנתונים
 def init_database():
     """יצירת טבלאות בסיס הנתונים"""
