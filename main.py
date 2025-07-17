@@ -125,6 +125,7 @@ WEATHER_OPTIONS = ['☀️ שמש', '🌧️ גשם', '☁️ מעונן', '🔥
 def get_main_keyboard():
     """יצירת מקלדת ראשית"""
     keyboard = [
+        [KeyboardButton("🔴 אני במצוקה")],
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
@@ -247,6 +248,8 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
     text = update.message.text
     
     # טיפול בכפתורי התפריט הראשי - תמיד פעילים
+    if text == "🔴 אני במצוקה":
+        return await start_distress_flow(update, context)
     if text == "📈 גרפים והיסטוריה":
         await show_analytics(update, context)
     elif text == "🎵 שירים מרגיעים":
@@ -279,6 +282,17 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
             "בחר אפשרות מהתפריט למטה:",
             reply_markup=get_main_keyboard()
         )
+
+async def start_distress_flow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """התחלת תסריט מצוקה"""
+    keyboard = [
+        [InlineKeyboardButton("✅ כן", callback_data="distress_breathing_yes"), InlineKeyboardButton("⛔️ לא, תודה", callback_data="distress_breathing_no")]
+    ]
+    await update.message.reply_text(
+        "אני איתך.\nהאם תרצה שננשום ביחד בקצב שהצעת? (שאיפה 4, החזק 4, נשיפה 6)",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return DISTRESS_BREATHING_CHOICE
 
 # =================================================================
 # דיווח מהיר - ConversationHandler
