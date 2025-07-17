@@ -297,6 +297,15 @@ async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=update.effective_chat.id, text="לא הבנתי, נסה שוב או לחץ /start")
     return
 
+# ----------------------------------------------------------------
+# DEBUG: קולט callback שלא נתפס
+# ----------------------------------------------------------------
+async def debug_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """DEBUG handler to log unmatched callback queries."""
+    query = update.callback_query
+    await query.answer()
+    logger.warning(f"DEBUG: Unhandled callback data: {query.data}")
+
 # =================================================================
 # דיווח מהיר - ConversationHandler
 # =================================================================
@@ -684,7 +693,10 @@ def create_quick_report_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_quick_description)
             ],
-            QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^RATE_")]
+            QUICK_ANXIETY: [
+                CallbackQueryHandler(complete_quick_report, pattern="^RATE_"),
+                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
+            ]
         },
         fallbacks=[
             CommandHandler("start", start),
@@ -709,10 +721,22 @@ def create_full_report_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_full_description)
             ],
-            FULL_ANXIETY: [CallbackQueryHandler(get_full_anxiety_level, pattern="^RATE_")],
-            FULL_LOCATION: [CallbackQueryHandler(get_full_location, pattern="^location_")],
-            FULL_PEOPLE: [CallbackQueryHandler(get_full_people, pattern="^people_")],
-            FULL_WEATHER: [CallbackQueryHandler(complete_full_report, pattern="^weather_")]
+            FULL_ANXIETY: [
+                CallbackQueryHandler(get_full_anxiety_level, pattern="^RATE_"),
+                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
+            ],
+            FULL_LOCATION: [
+                CallbackQueryHandler(get_full_location, pattern="^location_"),
+                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
+            ],
+            FULL_PEOPLE: [
+                CallbackQueryHandler(get_full_people, pattern="^people_"),
+                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
+            ],
+            FULL_WEATHER: [
+                CallbackQueryHandler(complete_full_report, pattern="^weather_"),
+                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
+            ]
         },
         fallbacks=[
             CommandHandler("start", start),
@@ -737,7 +761,10 @@ def create_venting_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_venting_content)
             ],
-            VENTING_SAVE: [CallbackQueryHandler(save_venting_choice, pattern="^save_venting_")]
+            VENTING_SAVE: [
+                CallbackQueryHandler(save_venting_choice, pattern="^save_venting_"),
+                CallbackQueryHandler(debug_callback, pattern=".*")  # DEBUG catch-all
+            ]
         },
         fallbacks=[
             CommandHandler("start", start),
