@@ -301,6 +301,15 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup=get_main_keyboard()
         )
 
+async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """תגובה לברירה לא מוכרת בתוך שיחה"""
+    if update.message:
+        await update.message.reply_text("לא הבנתי, נסה שוב או לחץ /start")
+    elif update.callback_query:
+        await update.callback_query.answer()
+        await context.bot.send_message(chat_id=update.effective_chat.id, text="לא הבנתי, נסה שוב או לחץ /start")
+    return
+
 # =================================================================
 # דיווח מהיר - ConversationHandler
 # =================================================================
@@ -1778,15 +1787,6 @@ def main():
         logger.error(f"שגיאה קריטית בהפעלת הבוט: {e}")
         print(f"❌ שגיאה קריטית: {e}")
         raise
-
-async def unknown_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """תגובה לברירה לא מוכרת בתוך שיחה"""
-    if update.message:
-        await update.message.reply_text("לא הבנתי, נסה שוב או לחץ /start")
-    elif update.callback_query:
-        await update.callback_query.answer()
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="לא הבנתי, נסה שוב או לחץ /start")
-    return
 
 # ==============================================
 #   Schema version middleware
