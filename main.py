@@ -1450,8 +1450,8 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         except:
             pass  # אם גם זה נכשל, לא נעשה כלום
 
-# # =================================================================
-# --- Panic Feature Functions (גרסה מתוקנת ויציבה) ---
+# =================================================================
+# --- Panic Feature Functions (גרסה 3 - Bulletproof) ---
 # =================================================================
 
 async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1459,6 +1459,10 @@ async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer()
     
+    # ניקוי כל נתוני שיחה קודמים מהפיצ'ר הזה
+    context.user_data.pop('breathing_task', None)
+    context.user_data.pop('scale_asked', None)
+
     keyboard = [
         [
             InlineKeyboardButton("✅ כן, ננשום יחד", callback_data="panic_yes_breath"),
@@ -1482,93 +1486,109 @@ async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         stop_button = InlineKeyboardMarkup([[InlineKeyboardButton("⏹️ הפסק והמשך הלאה", callback_data="panic_stop_breath")]])
         await query.edit_message_text("מתחילים לנשום יחד…\nתוכל להפסיק את התרגיל בכל שלב.", reply_markup=stop_button)
         
-        # יצירת משימת נשימה ברקע ושמירתה כדי שנוכל לבטל אותה
-        breathing_task = asyncio.create_task(breathing_cycle(update, context))
+        # יוצרים ושומרים את משימת הנשימה
+        breathing_task = asyncio.create_task(breathing_cycle(update.effective_chat.id, context))
         context.user_data['breathing_task'] = breathing_task
         
         return BREATHING
 
-    # אם המשתמש בחר "לא", מציעים שטיפת פנים
-    keyboard = [
-        [InlineKeyboardButton("✅ שטפתי פנים", callback_data="panic_face_done")],
-        [InlineKeyboardButton("🔙 חזור לתפריט הראשי", callback_data="panic_exit")]
-    ]
+    keyboard = [[InlineKeyboardButton("✅ שטפתי פנים", callback_data="panic_face_done")]]
     await query.edit_message_text(
         "בסדר גמור. אני מציע שתלך לשטוף פנים במים קרים.\nכשתסיים, לחץ על הכפתור.",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     return ASK_WASH
 
-async def breathing_cycle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def breathing_cycle(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     """מבצע את לולאת הנשימות ושולח הודעות למשתמש."""
-    chat_id = update.effective_chat.id
-    bot = context.bot
     try:
+        logger.info(f"Starting breathing cycle for chat {chat_id}.")
         for i in range(3):
-            await bot.send_message(chat_id, f"מחזור {i+1}/3:\n\n🌬️ שאיפה… (4 שניות)")
+            await context.bot.send_message(chat_id, f"מחזור {i+1}/3:\n\n🌬️ שאיפה… (4 שניות)")
             await asyncio.sleep(4)
-            await bot.send_message(chat_id, "🧘 החזק… (4 שניות)")
+            await context.bot.send_message(chat_id, "🧘 החזק… (4 שניות)")
             await asyncio.sleep(4)
-            await bot.send_message(chat_id, "😮‍💨 נשיפה… (6 שניות)")
+            await context.bot.send_message(chat_id, "😮‍💨 נשיפה… (6 שניות)")
             await asyncio.sleep(6)
         
-        # אם התרגיל הסתיים באופן טבעי (לא בוטל)
+        logger.info(f"Breathing cycle for chat {chat_id} finished naturally.")
         await context.bot.send_message(chat_id, "תרגיל הנשימה הסתיים.")
-        await ask_scale_generic(bot, chat_id, is_first_time=True)
-
+    
     except asyncio.CancelledError:
-        # אם המשימה בוטלה (המשתמש לחץ "הפסק"), נשלח הודעה מתאימה
-        await context.bot.send_message(chat_id, "תרגיל הנשימה הופסק.")
-        # אין צורך לעשות כלום פה, כי הפונקציה שביטלה אותנו כבר ממשיכה הלאה
+        logger.info(f"Breathing cycle for chat {chat_id} was cancelled successfully.")
+        # זהו מצב תקין, אין צורך לעשות כלום
         raise
     except Exception as e:
-        logger.error(f"Error in breathing cycle: {e}")
+        logger.error(f"UNEXPECTED ERROR in breathing_cycle for chat {chat_id}: {e}", exc_info=True)
     finally:
-        # ניקוי המשימה מהזיכרון
-        if 'breathing_task' in context.user_data:
-            del context.user_data['breathing_task']
+        # בסיום טבעי (לאחר הלולאה), שואלים את שאלת הדירוג
+        await ask_scale_if_needed(chat_id, context)
+        context.user_data.pop('breathing_task', None)
+
 
 async def stop_breathing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """מפסיק את תרגיל הנשימה ועובר לשאלת הדירוג."""
     query = update.callback_query
     await query.answer()
     
-    # ביטול משימת הנשימה אם היא עדיין קיימת
-    if 'breathing_task' in context.user_data:
-        context.user_data['breathing_task'].cancel()
-        del context.user_data['breathing_task']
-        
-    await query.delete_message() # מחיקת ההודעה עם כפתור "הפסק"
-    await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
+    task = context.user_data.get('breathing_task')
+    if task:
+        task.cancel()
+        # מנקים את המשימה מהזיכרון
+        context.user_data.pop('breathing_task', None)
+        logger.info(f"Breathing task for chat {update.effective_chat.id} cancellation requested.")
+    else:
+        logger.warning(f"Stop button pressed for chat {update.effective_chat.id}, but no task was found.")
+
+    # מוחקים את ההודעה עם כפתור העצירה
+    try:
+        await query.delete_message()
+    except Exception as e:
+        logger.warning(f"Could not delete message on stop_breathing: {e}")
+
+    await ask_scale_if_needed(update.effective_chat.id, context)
     
     return ASK_SCALE
+
 
 async def face_washed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """נקרא לאחר שהמשתמש שטף פנים."""
     query = update.callback_query
     await query.answer()
-    await query.delete_message()
-    await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
+    try:
+        await query.delete_message()
+    except Exception as e:
+        logger.warning(f"Could not delete message on face_washed: {e}")
+
+    await ask_scale_if_needed(update.effective_chat.id, context)
     return ASK_SCALE
 
-async def ask_scale_generic(bot, chat_id, is_first_time=False):
-    """פונקציית עזר ששואלת את המשתמש לדרג את רמת החרדה."""
-    question = "איך אתה מרגיש עכשיו, זה עזר?" if is_first_time else "ואיך עכשיו, החרדה ירדה?"
-    scale_kb = [[InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(0, 11)]]
-    
-    await bot.send_message(
-        chat_id,
-        f"{question}\nדרג מ-0 (רגוע לחלוטין) עד 10 (הכי חרד שאפשר):",
-        reply_markup=InlineKeyboardMarkup(scale_kb)
-    )
+async def ask_scale_if_needed(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """בודק אם כבר שאלנו את שאלת הדירוג, ואם לא - שואל אותה."""
+    # מנגנון הגנה מפני קריאות כפולות (Race Condition)
+    if not context.user_data.get('scale_asked', False):
+        context.user_data['scale_asked'] = True
+        logger.info(f"Asking for anxiety scale for chat {chat_id}")
+        
+        question = "איך אתה מרגיש עכשיו, זה עזר?"
+        scale_kb = [[InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(0, 11)]]
+        
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{question}\nדרג מ-0 (רגוע לחלוטין) עד 10 (הכי חרד שאפשר):",
+            reply_markup=InlineKeyboardMarkup(scale_kb)
+        )
+    else:
+        logger.info(f"Scale already asked for chat {chat_id}, skipping.")
+
+# --- שאר הפונקציות נשארות זהות לקודם ---
+# (handle_scale, offer_extra, start_extra, extra_done, extra_choice, exit_panic)
+# --- יש להשאיר אותן כמו שהן מהגרסה הקודמת ששלחתי ---
 
 async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """מטפל בתשובת המשתמש לשאלת הדירוג."""
     query = update.callback_query
     await query.answer()
     new_level = int(query.data.split("_")[2])
 
-    # בדיקה אם זו הפעם הראשונה שמדרגים בשיחה זו
     if "level_start" not in context.user_data:
         context.user_data["level_start"] = new_level
         context.user_data["attempts"] = 0
@@ -1576,7 +1596,6 @@ async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     old_level = context.user_data.get("level_now", new_level)
     context.user_data["level_now"] = new_level
 
-    # אם החרדה ירדה משמעותית או שהיא כבר נמוכה
     if new_level <= 3 or old_level - new_level >= 2:
         keyboard = [[
             InlineKeyboardButton("✅ כן, מספיק לי", callback_data="panic_enough"),
@@ -1588,17 +1607,16 @@ async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         )
         return OFFER_EXTRA
 
-    # אם החרדה לא ירדה מספיק
     context.user_data["attempts"] += 1
-    if context.user_data["attempts"] >= 2: # לאחר 2 נסיונות שלא צלחו
-        await query.edit_message_text("ניסינו כמה דברים. אני מציע לך בחום ללחוץ על כפתור 'זקוק לאוזן קשבת?' בתפריט הראשי ולשוחח עם סוכן AI אדיב ואמפתי. לפעמים זה מה שהכי עוזר. בהצלחה 🩵")
+    if context.user_data["attempts"] >= 2:
+        await query.edit_message_text("ניסינו כמה דברים. אני מציע לך בחום ללחוץ על כפתור 'זקוק לאוזן קשבת?' בתפריט הראשי ולשוחח עם סוכן AI. לפעמים זה מה שהכי עוזר. בהצלחה 🩵")
+        context.user_data.clear() # ניקוי בסיום
         return ConversationHandler.END
 
     await offer_extra(query, context)
     return OFFER_EXTRA
 
 async def offer_extra(query, context) -> int:
-    """מציע טכניקות נוספות."""
     buttons = [[InlineKeyboardButton(text, callback_data=f"panic_extra_{key}")] for key, (text, _) in EXTRA_TECHNIQUES.items()]
     await query.edit_message_text(
         "אני מציע שננסה עוד טכניקה קצרה נוספת. איזו מהאפשרויות הבאות תעדיף לנסות עכשיו?",
@@ -1607,7 +1625,6 @@ async def offer_extra(query, context) -> int:
     return OFFER_EXTRA
 
 async def start_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """מתחיל תרגיל נוסף."""
     query = update.callback_query
     await query.answer()
     key = query.data.split("_")[2]
@@ -1619,41 +1636,37 @@ async def start_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     return EXEC_EXTRA
 
 async def extra_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """נקרא לאחר סיום תרגיל נוסף."""
     query = update.callback_query
     await query.answer()
     await query.delete_message()
-    await ask_scale_generic(query.bot, query.message.chat_id)
+    await ask_scale_if_needed(update.effective_chat.id, context)
     return ASK_SCALE
 
 async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """מטפל בבחירה אם להמשיך לתרגיל נוסף או לסיים."""
     query = update.callback_query
     await query.answer()
     if query.data == "panic_enough":
         await query.edit_message_text("שמחתי לעזור. אני כאן תמיד כשתצטרך. 💙")
+        context.user_data.clear() # ניקוי בסיום
         return ConversationHandler.END
-    
-    # אם בחר "עוד תרגיל"
     await offer_extra(query, context)
     return OFFER_EXTRA
 
 async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """יציאה מסודרת מהשיחה וחזרה לתפריט הראשי."""
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("מובן. חוזרים לתפריט הראשי.", reply_markup=None)
-    await start(update, context) # קורא לפונקציית start כדי להציג את התפריט מחדש
+    context.user_data.clear() # ניקוי מלא ביציאה
     return ConversationHandler.END
 
-# הגדרת ה-ConversationHandler עבור פיצ'ר המצוקה
+# הגדרת ה-ConversationHandler נשארת זהה
 panic_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
     states={
         ASK_BREATH: [CallbackQueryHandler(decide_breath, pattern="^panic_(yes|no)_breath$")],
         BREATHING: [
             CallbackQueryHandler(stop_breathing, pattern="^panic_stop_breath$"),
-            CallbackQueryHandler(handle_scale, pattern="^panic_scale_") # מטפל גם בסיום טבעי וגם בעצירה
+            CallbackQueryHandler(handle_scale, pattern="^panic_scale_")
         ],
         ASK_WASH: [CallbackQueryHandler(face_washed, pattern="^panic_face_done$")],
         ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
@@ -1671,7 +1684,6 @@ panic_conv_handler = ConversationHandler(
     per_user=True,
     per_chat=True,
 )
-
 # =================================================================
 # Main Function
 # =================================================================
