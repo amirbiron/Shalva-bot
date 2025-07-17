@@ -673,6 +673,7 @@ def create_quick_report_conversation():
             MessageHandler(filters.ALL, unknown_input)
         ],
         name="quick_report_conv",
+        per_message=True,
         persistent=True
     )
 
@@ -700,6 +701,7 @@ def create_full_report_conversation():
             MessageHandler(filters.ALL, unknown_input)
         ],
         name="full_report_conv",
+        per_message=True,
         persistent=True
     )
 
@@ -724,6 +726,7 @@ def create_venting_conversation():
             MessageHandler(filters.ALL, unknown_input)
         ],
         name="venting_conv",
+        per_message=True,
         persistent=True
     )
 
@@ -736,6 +739,7 @@ def create_support_conversation():
         per_user=True,
         per_chat=True,
         name="support_conv",
+        per_message=True,
         persistent=True,
     )
 
@@ -1737,6 +1741,7 @@ panic_conv_handler = ConversationHandler(
     name="panic_conv",
     per_user=True,
     per_chat=True,
+    per_message=True,
     persistent=True,
 )
 
