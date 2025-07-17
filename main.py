@@ -1481,18 +1481,22 @@ async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 
 async def breathing_cycle(query, context):
+    chat_id = query.message.chat_id
+    bot = context.bot
+    stop_button = InlineKeyboardMarkup([[InlineKeyboardButton("⏹️ הפסק תרגיל", callback_data="panic_stop_breath")]])
     for i in range(3):
         try:
-            await context.bot.send_message(query.message.chat_id, f"מחזור {i+1}:\nשאיפה… 4")
+            await bot.send_message(chat_id, f"מחזור {i+1}:\nשאיפה… 4", reply_markup=stop_button)
             await asyncio.sleep(4)
-            await context.bot.send_message(query.message.chat_id, "החזק… 4")
+            await bot.send_message(chat_id, "החזק… 4", reply_markup=stop_button)
             await asyncio.sleep(4)
-            await context.bot.send_message(query.message.chat_id, "נשיפה… 6")
+            await bot.send_message(chat_id, "נשיפה… 6", reply_markup=stop_button)
             await asyncio.sleep(6)
         except Exception as e:
             logger.error(f"Error in breathing cycle: {e}")
             break
-    await ask_scale_generic(context.bot, query.message.chat_id, is_first_time=True)
+    # לאחר סיום או עצירת התרגיל נעבור לשאלת דירוג
+    await ask_scale_generic(bot, chat_id, is_first_time=True)
 
 
 async def face_washed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1554,7 +1558,31 @@ async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 async def offer_extra(query, context) -> None:
-    buttons = [[InlineKeyboardButton(text, callback_data=f"panic_extra_{key}")] for key, (text, _) in EXTRA_TECHNIQUES.items()]
+    # הצגת שתי טכניקות בכל פעם, עם כפתור "הצג עוד"
+    all_keys = list(EXTRA_TECHNIQUES.keys())
+    shown_keys = context.user_data.get('shown_techniques', [])
+
+    # סינון טכניקות שהוצגו כבר
+    remaining_keys = [key for key in all_keys if key not in shown_keys]
+
+    # בחירת שתי הטכניקות הבאות
+    to_show_keys = remaining_keys[:2]
+
+    # אם סיימנו את כולן ‑ איפוס הרשימה והצגת הראשונות שוב
+    if not to_show_keys:
+        context.user_data['shown_techniques'] = []
+        to_show_keys = all_keys[:2]
+        remaining_keys = all_keys[2:]
+
+    buttons = [[InlineKeyboardButton(EXTRA_TECHNIQUES[key][0], callback_data=f"panic_extra_{key}")] for key in to_show_keys]
+
+    # עדכון רשימת הטכניקות שהוצגו
+    context.user_data['shown_techniques'] = shown_keys + to_show_keys
+
+    # הוספת כפתור "הצג עוד" אם נשארו טכניקות
+    if len(remaining_keys) > 0:
+        buttons.append([InlineKeyboardButton("🔄 הצע טכניקות נוספות", callback_data="panic_more_extra")])
+
     await query.edit_message_text(
         "בוא ננסה טכניקה נוספת. איזו מהבאות תרצה לנסות?",
         reply_markup=InlineKeyboardMarkup(buttons)
@@ -1596,7 +1624,10 @@ panic_conv_handler = ConversationHandler(
     entry_points=[MessageHandler(filters.Regex("^🔴 אני במצוקה$"), panic_entry)],
     states={
         ASK_BREATH: [CallbackQueryHandler(decide_breath, pattern="^panic_(yes|no)_breath$")],
-        BREATHING: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
+        BREATHING: [
+            CallbackQueryHandler(handle_scale, pattern="^panic_scale_"),
+            CallbackQueryHandler(face_washed, pattern="^panic_stop_breath$")  # מאפשר להפסיק תרגיל נשימה ולעבור לדירוג
+        ],
         ASK_WASH: [CallbackQueryHandler(face_washed, pattern="^panic_face_done$")],
         ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
         OFFER_EXTRA: [
@@ -1625,13 +1656,11 @@ def main():
         application = Application.builder().token(BOT_TOKEN).build()
         
         # הוספת ConversationHandlers - סדר חשוב!
+        application.add_handler(panic_conv_handler)  # רישום panic_conv_handler קודם
         application.add_handler(create_quick_report_conversation())
         application.add_handler(create_full_report_conversation())
         application.add_handler(create_venting_conversation())
         application.add_handler(create_support_conversation())
-        
-        # הוספת panic_conv_handler
-        application.add_handler(panic_conv_handler)
         
         # הוספת handlers כלליים
         application.add_handler(CommandHandler("start", start))
