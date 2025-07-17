@@ -1451,7 +1451,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             pass  # אם גם זה נכשל, לא נעשה כלום
 
 # =================================================================
-# --- Panic Feature Functions (גרסה 5 - Final & Stable) ---
+# --- Panic Feature Functions (גרסה 6 - סגירה נקייה של השיחה) ---
 # =================================================================
 
 async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1499,7 +1499,7 @@ async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def breathing_cycle(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     try:
         for i in range(3):
-            if not context.user_data.get('breathing_task'): break # בדיקה אם המשימה בוטלה
+            if not context.user_data.get('breathing_task'): break
             await context.bot.send_message(chat_id, f"מחזור {i+1}/3:\n\n🌬️ שאיפה… (4 שניות)")
             await asyncio.sleep(4)
             if not context.user_data.get('breathing_task'): break
@@ -1509,7 +1509,6 @@ async def breathing_cycle(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id, "😮‍💨 נשיפה… (6 שניות)")
             await asyncio.sleep(6)
         
-        # אם הלולאה הסתיימה (ולא נקטעה באמצע)
         if context.user_data.get('breathing_task'):
              await context.bot.send_message(chat_id, "תרגיל הנשימה הסתיים.")
     except asyncio.CancelledError:
@@ -1585,8 +1584,12 @@ async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return OFFER_EXTRA
 
     context.user_data["attempts"] += 1
+    # **>>> כאן בוצע השינוי בטקסט שביקשת <<<**
     if context.user_data["attempts"] >= 2:
-        await query.edit_message_text("ניסינו כמה דברים. אני מציע לך בחום ללחוץ על כפתור 'זקוק לאוזן קשבת?' בתפריט הראשי. לפעמים זה מה שהכי עוזר. בהצלחה 🩵")
+        await query.edit_message_text(
+            "נגמרו לי ההצעות במאגר, תמיד תוכל ללחוץ על לחצן המצוקה כדי להתחיל סבב נוסף.\n"
+            "ממליץ לך בחום לעבור ללחצן \"זקוק/ה לאוזן קשבת?\", תוכל לנהל שיחה עם סוכן בינה מלאכותית אדיב, מכיל ואמפתי 🩵"
+        )
         return ConversationHandler.END
 
     return await offer_extra(update, context)
@@ -1610,10 +1613,9 @@ async def offer_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     message_text = "בוא ננסה טכניקה נוספת. איזו מהבאות תרצה לנסות?"
 
     try:
-        # בדיקה אם update הוא query או update רגיל
         if hasattr(update, 'callback_query') and update.callback_query:
             await update.callback_query.edit_message_text(message_text, reply_markup=InlineKeyboardMarkup(buttons))
-        else: # במקרה שמגיעים לכאן לא דרך לחיצת כפתור
+        else:
             await update.message.reply_text(message_text, reply_markup=InlineKeyboardMarkup(buttons))
     except Exception as e:
         logger.error(f"Error in offer_extra: {e}")
@@ -1657,6 +1659,19 @@ async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     
     return await offer_extra(update, context)
 
+# **>>> פונקציית יציאה חדשה ובטוחה <<<**
+async def fallback_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """מטפלת בפקודת /start באמצע השיחה, מוודאת שהיא נסגרת ורק אז מפעילה את תפריט הפתיחה."""
+    # ניקוי כל הנתונים של השיחה הנוכחית
+    for key in ['breathing_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
+        context.user_data.pop(key, None)
+    
+    # מפעילה את פונקציית ה-start הרגילה שלך
+    await start(update, context)
+    
+    # מוודאת שהשיחה מסתיימת באופן רשמי
+    return ConversationHandler.END
+
 async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -1670,7 +1685,7 @@ async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.user_data.pop(key, None)
     return ConversationHandler.END
 
-# הגדרת ה-ConversationHandler עבור פיצ'ר המצוקה
+# **>>> הגדרת ConversationHandler מעודכנת עם ה-fallback החדש <<<**
 panic_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
     states={
@@ -1688,7 +1703,7 @@ panic_conv_handler = ConversationHandler(
         EXEC_EXTRA: [CallbackQueryHandler(extra_done, pattern="^panic_done_extra$")],
     },
     fallbacks=[
-        CommandHandler("start", start), 
+        CommandHandler("start", fallback_start),  # שימוש בפונקציית היציאה החדשה
         CallbackQueryHandler(exit_panic, pattern='^panic_exit$')
     ],
     name="panic_conv",
