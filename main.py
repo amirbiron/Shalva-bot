@@ -183,6 +183,8 @@ def get_progress_indicator(current_step, total_steps):
 async def handle_menu_during_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בלחיצות על תפריט במהלך שיחה פעילה"""
     await ensure_user_in_db(update)
+    # איפוס דגל זרימה פעיל
+    reset_flow(context)
     text = update.message.text
     
     # ניקוי הנתונים הזמניים
@@ -273,21 +275,6 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
         keyboard = [[InlineKeyboardButton("לחץ כאן כדי להתחיל בשיחה אישית", callback_data='support_chat')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text('כדי להגן על פרטיותך ולהיכנס למצב שיחה, אנא לחץ על הכפתור:', reply_markup=reply_markup)
-    elif text == "⚡ דיווח מהיר":
-        await update.message.reply_text(
-            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מהיר.",
-            reply_markup=get_main_keyboard()
-        )
-    elif text == "🔍 דיווח מלא":
-        await update.message.reply_text(
-            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל דיווח חדש, לחץ על /start ואז בחר דיווח מלא.",
-            reply_markup=get_main_keyboard()
-        )
-    elif text == "🗣️ פריקה חופשית":
-        await update.message.reply_text(
-            "🤔 נראה שאתה כבר באמצע פעולה אחרת.\n\nאם אתה רוצה להתחיל פריקה חופשית, לחץ על /start ואז בחר פריקה חופשית.",
-            reply_markup=get_main_keyboard()
-        )
     elif text == "🔴 אני במצוקה":
         keyboard = [[InlineKeyboardButton("לחץ כאן להתחלת תרגול", callback_data='start_panic_flow')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -305,7 +292,15 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
 async def start_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת דיווח מהיר"""
     await ensure_user_in_db(update)
-    context.user_data.clear()  # ניקוי נתונים קודמים
+    # --- ניהול דגל זרימה ---
+    if context.user_data.get("active_flow") == "quick":
+        pass  # ממשיך כרגיל
+    elif context.user_data.get("active_flow"):
+        await update.message.reply_text("💡 עברת ל'דיווח מהיר' – הפעולה הקודמת בוטלה.")
+        reset_flow(context)
+    context.user_data["active_flow"] = "quick"
+    
+    # הכנת נתונים
     context.user_data['report_type'] = 'quick'
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
@@ -370,12 +365,14 @@ async def complete_quick_report(update: Update, context: ContextTypes.DEFAULT_TY
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     
-    # ניקוי נתונים
+    # ניקוי דגל זרימה ונתונים
+    reset_flow(context)
     context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ביטול דיווח מהיר"""
+    reset_flow(context)
     context.user_data.clear()
     await update.message.reply_text(
         "❌ דיווח בוטל. אפשר להתחיל מחדש בכל עת.",
@@ -390,7 +387,14 @@ async def cancel_quick_report(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def start_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת דיווח מלא"""
     await ensure_user_in_db(update)
-    context.user_data.clear()
+    # --- ניהול דגל זרימה ---
+    if context.user_data.get("active_flow") == "full":
+        pass
+    elif context.user_data.get("active_flow"):
+        await update.message.reply_text("💡 עברת ל'דיווח מלא' – הפעולה הקודמת בוטלה.")
+        reset_flow(context)
+    context.user_data["active_flow"] = "full"
+    
     context.user_data['report_type'] = 'full'
     context.user_data['timestamp'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
@@ -509,12 +513,13 @@ async def complete_full_report(update: Update, context: ContextTypes.DEFAULT_TYP
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     
-    # ניקוי נתונים
+    reset_flow(context)
     context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ביטול דיווח מלא"""
+    reset_flow(context)
     context.user_data.clear()
     await update.message.reply_text(
         "❌ דיווח בוטל. אפשר להתחיל מחדש בכל עת.",
@@ -529,7 +534,13 @@ async def cancel_full_report(update: Update, context: ContextTypes.DEFAULT_TYPE)
 async def start_free_venting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """התחלת פריקה חופשית"""
     await ensure_user_in_db(update)
-    context.user_data.clear()
+    # --- ניהול דגל זרימה ---
+    if context.user_data.get("active_flow") == "venting":
+        pass
+    elif context.user_data.get("active_flow"):
+        await update.message.reply_text("💡 עברת ל'פריקה חופשית' – הפעולה הקודמת בוטלה.")
+        reset_flow(context)
+    context.user_data["active_flow"] = "venting"
     
     await update.message.reply_text(
         "🗣️ פריקה חופשית\n\nכתב כל מה שאתה מרגיש. אין שאלות, אין לחץ.\nרק תן לזה לצאת...",
@@ -582,12 +593,13 @@ async def save_venting_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     
-    # ניקוי נתונים
+    reset_flow(context)
     context.user_data.clear()
     return ConversationHandler.END
 
 async def cancel_venting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """ביטול פריקה חופשית"""
+    reset_flow(context)
     context.user_data.clear()
     await update.message.reply_text(
         "❌ פריקה בוטלה. אפשר להתחיל מחדש בכל עת.",
@@ -604,8 +616,14 @@ EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט 
 async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
+    # --- ניהול דגל זרימה ---
+    if context.user_data.get("active_flow") != "support" and context.user_data.get("active_flow"):
+        reset_flow(context)
+    context.user_data["active_flow"] = "support"
+    
     if not GEMINI_API_KEY:
         await query.edit_message_text("שירות השיחה אינו זמין כרגע.")
+        reset_flow(context)
         return ConversationHandler.END
 
     context.user_data['gemini_model'] = genai.GenerativeModel('gemini-1.5-flash')
@@ -634,6 +652,7 @@ async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text("שמחתי להיות כאן בשבילך. אני תמיד כאן אם תצטרך אותי שוב. ❤️\nכדי לחזור לתפריט הראשי, הקלד /start.")
     if 'chat_history' in context.user_data: del context.user_data['chat_history']
     if 'gemini_model' in context.user_data: del context.user_data['gemini_model']
+    reset_flow(context)
     return ConversationHandler.END
 
 # =================================================================
