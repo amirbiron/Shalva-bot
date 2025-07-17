@@ -12,8 +12,6 @@ from collections import Counter
 
 from panic_module import panic_conv
 
-application.add_handler(panic_conv)
-
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -665,7 +663,7 @@ def create_full_report_conversation():
         },
         fallbacks=[
             CommandHandler("start", cancel_full_report),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report)
+            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report),
         ]
     )
 
@@ -1452,6 +1450,9 @@ def main():
         application.add_handler(create_full_report_conversation())
         application.add_handler(create_venting_conversation())
         application.add_handler(create_support_conversation())
+        
+        # הוספת panic_conv
+        application.add_handler(panic_conv)
         
         # הוספת handlers כלליים
         application.add_handler(CommandHandler("start", start))
