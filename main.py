@@ -1451,14 +1451,13 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             pass  # אם גם זה נכשל, לא נעשה כלום
 
 # =================================================================
-# --- Panic Feature Functions (גרסה 6 - סגירה נקייה של השיחה) ---
+# --- Panic Feature Functions (גרסה 7 - שיפורי UI ויציבות) ---
 # =================================================================
 
 async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     
-    # איפוס נתונים רלוונטיים מתחילת השיחה
     for key in ['breathing_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
 
@@ -1489,9 +1488,14 @@ async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         
         return BREATHING
 
-    keyboard = [[InlineKeyboardButton("✅ שטפתי פנים", callback_data="panic_face_done")]]
+    # **>>> כאן בוצע השינוי שביקשת <<<**
+    keyboard = [
+        [InlineKeyboardButton("✅ ביצעתי", callback_data="panic_face_done")],
+        [InlineKeyboardButton("🔄 הצע טכניקות נוספות", callback_data="panic_more_extra")],
+        [InlineKeyboardButton("🔙 חזרה לתפריט הראשי", callback_data="panic_exit")]
+    ]
     await query.edit_message_text(
-        "בסדר גמור. אני מציע שתלך לשטוף פנים במים קרים.\nכשתסיים, לחץ על הכפתור.",
+        "לפעמים קשה להתרכז בנשימות, יש לי עוד הצעה, מה דעתך לשטוף פנים במים קרים? וכשתחזור - לחץ על \"ביצעתי\".",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     return ASK_WASH
@@ -1584,7 +1588,6 @@ async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return OFFER_EXTRA
 
     context.user_data["attempts"] += 1
-    # **>>> כאן בוצע השינוי בטקסט שביקשת <<<**
     if context.user_data["attempts"] >= 2:
         await query.edit_message_text(
             "נגמרו לי ההצעות במאגר, תמיד תוכל ללחוץ על לחצן המצוקה כדי להתחיל סבב נוסף.\n"
@@ -1657,19 +1660,19 @@ async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         await query.edit_message_text("שמחתי לעזור. אני כאן תמיד כשתצטרך. 💙")
         return ConversationHandler.END
     
-    return await offer_extra(update, context)
+    # אם לחץ על "עוד תרגיל", קוראים ל-offer_extra
+    # חשוב לערוך את ההודעה הנוכחית ולא לשלוח חדשה
+    try:
+        await offer_extra(update.callback_query, context)
+    except Exception:
+        # במקרה שהקריאה נכשלת (כי offer_extra מצפה ל-update ולא ל-query), ננסה עם update
+        await offer_extra(update, context)
+    return OFFER_EXTRA
 
-# **>>> פונקציית יציאה חדשה ובטוחה <<<**
 async def fallback_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """מטפלת בפקודת /start באמצע השיחה, מוודאת שהיא נסגרת ורק אז מפעילה את תפריט הפתיחה."""
-    # ניקוי כל הנתונים של השיחה הנוכחית
     for key in ['breathing_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
-    
-    # מפעילה את פונקציית ה-start הרגילה שלך
     await start(update, context)
-    
-    # מוודאת שהשיחה מסתיימת באופן רשמי
     return ConversationHandler.END
 
 async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1680,12 +1683,11 @@ async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     except Exception as e:
         logger.warning(f"Could not edit message on exit_panic: {e}")
     
-    # ניקוי כל הנתונים של השיחה הנוכחית
     for key in ['breathing_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
     return ConversationHandler.END
 
-# **>>> הגדרת ConversationHandler מעודכנת עם ה-fallback החדש <<<**
+
 panic_conv_handler = ConversationHandler(
     entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
     states={
@@ -1694,7 +1696,11 @@ panic_conv_handler = ConversationHandler(
             CallbackQueryHandler(stop_breathing, pattern="^panic_stop_breath$"),
             CallbackQueryHandler(handle_scale, pattern="^panic_scale_")
         ],
-        ASK_WASH: [CallbackQueryHandler(face_washed, pattern="^panic_face_done$")],
+        # **>>> כאן בוצע השינוי למצב ASK_WASH <<<**
+        ASK_WASH: [
+            CallbackQueryHandler(face_washed, pattern="^panic_face_done$"),
+            CallbackQueryHandler(extra_choice, pattern="^panic_more_extra$"), # מטפל בכפתור "הצע עוד"
+        ],
         ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
         OFFER_EXTRA: [
             CallbackQueryHandler(start_extra, pattern="^panic_extra_"),
@@ -1703,7 +1709,7 @@ panic_conv_handler = ConversationHandler(
         EXEC_EXTRA: [CallbackQueryHandler(extra_done, pattern="^panic_done_extra$")],
     },
     fallbacks=[
-        CommandHandler("start", fallback_start),  # שימוש בפונקציית היציאה החדשה
+        CommandHandler("start", fallback_start),
         CallbackQueryHandler(exit_panic, pattern='^panic_exit$')
     ],
     name="panic_conv",
