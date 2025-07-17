@@ -1644,19 +1644,21 @@ def main() -> None:
     Initializes and runs the Telegram bot with a structured handler order.
     """
     # שלב 1: בניית האפליקציה
-    application = Application.builder().token(TOKEN).build()
+    application = Application.builder().token(BOT_TOKEN).build()
 
     # שלב 2: קביעת תפריט הפקודות של הבוט
     application.job_queue.run_once(setup_bot_commands, 0)
 
     # של_3: רישום כל ה-ConversationHandlers ראשונים!
     # ודא ששמות המשתנים כאן תואמים לשמות בקוד שלך
-    application.add_handler(conv_handler_full_report) # השם שתוקן מהשגיאה הקודמת
+    application.add_handler(conv_handler_quick_report)
+    application.add_handler(conv_handler_full_report)
+    application.add_handler(conv_handler_venting)
     application.add_handler(conv_handler_panic)  # רישום שיחת "אני במצוקה"
     
     # שלב 4: רישום מנהלי פקודות ראשיים
     application.add_handler(CommandHandler("start", start)) # שימוש בשם הנכון 'start'
-    application.add_handler(CommandHandler("help", help))   # ודא ששם פונקציית העזרה הוא 'help'
+    application.add_handler(CommandHandler("help", show_help))   # שימוש בפונקציה הקיימת 'show_help'
     # הוסף כאן את כל שאר מנהלי הפקודות שלך...
 
     # שלב 5: הפעלת הבוט
