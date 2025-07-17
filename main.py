@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pymongo
 import google.generativeai as genai
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler, RedisPersistence
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler, PicklePersistence
 from collections import Counter
 import asyncio
 from datetime import datetime
@@ -156,10 +156,10 @@ def get_anxiety_level_keyboard():
     row2 = []
     
     for i in range(1, 6):
-        row1.append(InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}"))
+        row1.append(InlineKeyboardButton(str(i), callback_data=f"RATE_{i}"))
     
     for i in range(6, 11):
-        row2.append(InlineKeyboardButton(f"{i}", callback_data=f"anxiety_{i}"))
+        row2.append(InlineKeyboardButton(str(i), callback_data=f"RATE_{i}"))
     
     keyboard.append(row1)
     keyboard.append(row2)
@@ -656,7 +656,7 @@ def create_quick_report_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_quick_description)
             ],
-            QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^anxiety_")]
+            QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^RATE_")]
         },
         fallbacks=[
             CommandHandler("start", start),
@@ -680,7 +680,7 @@ def create_full_report_conversation():
                 MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_full_description)
             ],
-            FULL_ANXIETY: [CallbackQueryHandler(get_full_anxiety_level, pattern="^anxiety_")],
+            FULL_ANXIETY: [CallbackQueryHandler(get_full_anxiety_level, pattern="^RATE_")],
             FULL_LOCATION: [CallbackQueryHandler(get_full_location, pattern="^location_")],
             FULL_PEOPLE: [CallbackQueryHandler(get_full_people, pattern="^people_")],
             FULL_WEATHER: [CallbackQueryHandler(complete_full_report, pattern="^weather_")]
@@ -1742,7 +1742,13 @@ def main():
         init_database()
         
         # יצירת האפליקציה
-        application = Application.builder().token(BOT_TOKEN).persistence(RedisPersistence.from_url(os.getenv("REDIS_URL", "redis://localhost:6379/0"))).build()
+        persistence = PicklePersistence(filepath="bot_data.pkl")
+        application = (
+            Application.builder()
+            .token(BOT_TOKEN)
+            .persistence(persistence)
+            .build()
+        )
         
         # הוספת ConversationHandlers - סדר חשוב!
         application.add_handler(panic_conv_handler)  # רישום panic_conv_handler קודם
