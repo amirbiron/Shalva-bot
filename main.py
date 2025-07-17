@@ -46,6 +46,17 @@ else:
 # --- Conversation Handler States (NEW) ---
 SUPPORT_CHAT = range(1)
 
+# State definitions for the panic conversation (avoid conflicts)
+(ASK_BREATH, BREATHING, ASK_WASH, ASK_SCALE, OFFER_EXTRA, EXEC_EXTRA) = range(100, 106)
+
+# Extra calming techniques
+EXTRA_TECHNIQUES = {
+    "count": ("🔹 ספירה לאחור מ-100 בקפיצות של 7", "נתחיל: 100… 93… 86… בהצלחה!"),
+    "press": ("🔸 לחץ על כף היד בין האגודל לאצבע", "לחץ על הנקודה חצי דקה, ואז לחץ '✅ ביצעתי'"),
+    "move": ("🚶 קום וזוז קצת – תזוזה משחררת מתח", "קום לזוז דקה-שתיים ואז לחץ '✅ ביצעתי'"),
+    "drink": ("💧 שתה מים קרים לאט לאט", "שתה מים בלגימות קטנות ולחץ '✅ ביצעתי'"),
+}
+
 # --- The Persona Prompt for Gemini (NEW) ---
 EMPATHY_PROMPT = """אתה עוזר רגשי אישי, שפועל דרך בוט טלגרם.
 משתמש פונה אליך כשהוא מרגיש לחץ, חרדה, או צורך באוזן קשבת.
@@ -142,6 +153,7 @@ def get_main_keyboard():
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
+        [KeyboardButton("🔴 אני במצוקה")],
         [InlineKeyboardButton("💬 זקוק/ה לאוזן קשבת", callback_data='start_support_chat')],
         [KeyboardButton("⚙️ הגדרות")]
     ]
@@ -693,8 +705,9 @@ def create_venting_conversation():
     )
 
 def create_panic_conversation():
+    """Create the panic conversation handler (entry via menu button)"""
     return ConversationHandler(
-        entry_points=[CallbackQueryHandler(panic_entry, pattern='^start_panic_flow$')],
+        entry_points=[MessageHandler(filters.Regex("^🔴 אני במצוקה$"), panic_entry)],
         states={
             ASK_BREATH: [CallbackQueryHandler(decide_breath, pattern="^panic_(yes|no)_breath$")],
             BREATHING: [
@@ -706,7 +719,8 @@ def create_panic_conversation():
                 CallbackQueryHandler(extra_done, pattern="^extra_done$")
             ],
         },
-        fallbacks=[CommandHandler("start", cancel_panic)],
+        fallbacks=[CommandHandler("start", start)],
+        name="panic_conv",
         per_user=True,
         per_chat=True,
     )
@@ -1633,7 +1647,7 @@ async def cancel_panic(update: Update, context: ContextTypes.DEFAULT_TYPE):
 conv_handler_quick_report = create_quick_report_conversation()
 conv_handler_full_report = create_full_report_conversation()
 conv_handler_venting = create_venting_conversation()
-conv_handler_panic = create_panic_conversation()
+panic_conv_handler = create_panic_conversation()
 
 # =================================================================
 # Main Function
@@ -1654,7 +1668,7 @@ def main() -> None:
     application.add_handler(conv_handler_quick_report)
     application.add_handler(conv_handler_full_report)
     application.add_handler(conv_handler_venting)
-    application.add_handler(conv_handler_panic)  # רישום שיחת "אני במצוקה"
+    application.add_handler(panic_conv_handler)  # רישום שיחת "אני במצוקה"
     
     # שלב 4: רישום מנהלי פקודות ראשיים
     application.add_handler(CommandHandler("start", start)) # שימוש בשם הנכון 'start'
