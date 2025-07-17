@@ -8,9 +8,10 @@ import google.generativeai as genai
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, CallbackQueryHandler, ConversationHandler
 from collections import Counter
+import asyncio
 
 
-from panic_module import panic_conv
+# -----------------------------
 
 # הגדרות לוגים
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -39,6 +40,18 @@ FREE_VENTING, VENTING_SAVE = range(2)
 
 # שיחת תמיכה
 SUPPORT_CHAT = range(17)
+
+# -----------------------------------------------------------------
+# Panic feature global definitions (states and techniques)
+# -----------------------------------------------------------------
+(ASK_BREATH, BREATHING, ASK_WASH, ASK_SCALE, OFFER_EXTRA, EXEC_EXTRA) = range(100, 106)
+
+EXTRA_TECHNIQUES = {
+    "count": ("🔹 ספירה לאחור מ-100 בקפיצות של 7", "נתחיל: 100… 93… 86… בהצלחה!"),
+    "press": ("🔸 לחץ על כף היד בין האגודל לאצבע", "לחץ על הנקודה חצי דקה, ואז לחץ '✅ ביצעתי'"),
+    "move": ("🚶 קום וזוז קצת – תזוזה משחררת מתח", "קום לזוז דקה-שתיים ואז לחץ '✅ ביצעתי'"),
+    "drink": ("💧 שתה מים קרים לאט לאט", "שתה מים בלגימות קטנות ולחץ '✅ ביצעתי'"),
+}
 
 # הגדרת בסיס הנתונים
 def init_database():
@@ -128,7 +141,7 @@ def get_main_keyboard():
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
-        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("⚙️ הגדרות")]
+        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("🔴 אני במצוקה"), KeyboardButton("⚙️ הגדרות")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -1433,6 +1446,172 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             pass  # אם גם זה נכשל, לא נעשה כלום
 
 # =================================================================
+# --- Panic Feature Functions ---
+# =================================================================
+
+async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    keyboard = [[
+        InlineKeyboardButton("✅ כן", callback_data="panic_yes_breath"),
+        InlineKeyboardButton("⛔️ לא, תודה", callback_data="panic_no_breath"),
+    ]]
+    await update.message.reply_text(
+        "אני איתך.\n"
+        "האם תרצה שננשום יחד בקצב 4-4-6?\n\n"
+        "(בכל שלב, אפשר לחזור לתפריט הראשי עם /start)",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    return ASK_BREATH
+
+
+async def decide_breath(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "panic_yes_breath":
+        await query.edit_message_text("מתחילים לנשום יחד…")
+        asyncio.create_task(breathing_cycle(query, context))
+        return BREATHING
+
+    keyboard = [[InlineKeyboardButton("✅ שטפתי פנים", callback_data="panic_face_done")]]
+    await query.edit_message_text(
+        "אני מציע שתלך לשטוף פנים במים קרים.\nכשתסיים לחץ על הכפתור.",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+    return ASK_WASH
+
+
+async def breathing_cycle(query, context):
+    for i in range(3):
+        try:
+            await context.bot.send_message(query.message.chat_id, f"מחזור {i+1}:\nשאיפה… 4")
+            await asyncio.sleep(4)
+            await context.bot.send_message(query.message.chat_id, "החזק… 4")
+            await asyncio.sleep(4)
+            await context.bot.send_message(query.message.chat_id, "נשיפה… 6")
+            await asyncio.sleep(6)
+        except Exception as e:
+            logger.error(f"Error in breathing cycle: {e}")
+            break
+    await ask_scale_generic(context.bot, query.message.chat_id, is_first_time=True)
+
+
+async def face_washed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.delete_message()
+    await ask_scale_generic(query.bot, query.message.chat_id, is_first_time=True)
+    return ASK_SCALE
+
+
+async def ask_scale_generic(bot, chat_id, is_first_time=False):
+    question = "ואיך עכשיו, החרדה ירדה?" if not is_first_time else "איך אתה מרגיש עכשיו? זה עזר?"
+    scale_kb = [[InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(0, 11)]]
+    await bot.send_message(
+        chat_id,
+        f"{question}\nדרג מ-0 (רגוע) עד 10 (הכי חרד):",
+        reply_markup=InlineKeyboardMarkup(scale_kb)
+    )
+
+
+async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    new_level = int(query.data.split("_")[2])
+
+    if "level_start" not in context.user_data:
+        context.user_data["level_start"] = new_level
+        context.user_data["level_now"] = new_level
+        context.user_data["attempts"] = 0
+
+        if new_level <= 3:
+            await query.edit_message_text("נפלא! נראה שאתה כבר רגוע. אני כאן אם תצטרך.")
+            return ConversationHandler.END
+
+        await offer_extra(query, context)
+        return OFFER_EXTRA
+
+    old_level = context.user_data.get("level_now", new_level)
+    context.user_data["level_now"] = new_level
+
+    if new_level <= 3 or old_level - new_level >= 2:
+        keyboard = [[
+            InlineKeyboardButton("✅ מספיק לי", callback_data="panic_enough"),
+            InlineKeyboardButton("🔄 עוד תרגיל", callback_data="panic_more_extra"),
+        ]]
+        await query.edit_message_text(
+            "כל הכבוד! רואים ירידה יפה בחרדה.\nתרצה להמשיך או שזה מספיק?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return OFFER_EXTRA
+
+    context.user_data["attempts"] += 1
+    if context.user_data["attempts"] >= 2:
+        await query.edit_message_text("ניסינו כמה דברים. אני מציע לך בחום לנסות את פיצ'ר 'זקוק לאוזן קשבת' לשיחה אישית. לפעמים זה מה שהכי עוזר. בהצלחה 🩵")
+        return ConversationHandler.END
+
+    await offer_extra(query, context)
+    return OFFER_EXTRA
+
+
+async def offer_extra(query, context) -> None:
+    buttons = [[InlineKeyboardButton(text, callback_data=f"panic_extra_{key}")] for key, (text, _) in EXTRA_TECHNIQUES.items()]
+    await query.edit_message_text(
+        "בוא ננסה טכניקה נוספת. איזו מהבאות תרצה לנסות?",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def start_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    key = query.data.split("_")[2]
+    _, intro = EXTRA_TECHNIQUES[key]
+    await query.edit_message_text(
+        f"{intro}\nכשתסיים, לחץ על הכפתור.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ ביצעתי", callback_data="panic_done_extra")]])
+    )
+    return EXEC_EXTRA
+
+
+async def extra_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.delete_message()
+    await ask_scale_generic(query.bot, query.message.chat_id)
+    return ASK_SCALE
+
+
+async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    if query.data == "panic_enough":
+        await query.edit_message_text("שמחתי לעזור. אני כאן תמיד כשתצטרך 💙")
+        return ConversationHandler.END
+    await offer_extra(query, context)
+    return OFFER_EXTRA
+
+
+# Panic ConversationHandler
+panic_conv_handler = ConversationHandler(
+    entry_points=[MessageHandler(filters.Regex("^🔴 אני במצוקה$"), panic_entry)],
+    states={
+        ASK_BREATH: [CallbackQueryHandler(decide_breath, pattern="^panic_(yes|no)_breath$")],
+        BREATHING: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
+        ASK_WASH: [CallbackQueryHandler(face_washed, pattern="^panic_face_done$")],
+        ASK_SCALE: [CallbackQueryHandler(handle_scale, pattern="^panic_scale_\\d+$")],
+        OFFER_EXTRA: [
+            CallbackQueryHandler(start_extra, pattern="^panic_extra_"),
+            CallbackQueryHandler(extra_choice, pattern="^panic_(enough|more_extra)$"),
+        ],
+        EXEC_EXTRA: [CallbackQueryHandler(extra_done, pattern="^panic_done_extra$")],
+    },
+    fallbacks=[CommandHandler("start", start)],
+    name="panic_conv",
+    per_user=True,
+    per_chat=True,
+)
+
+# =================================================================
 # Main Function
 # =================================================================
 
@@ -1451,8 +1630,8 @@ def main():
         application.add_handler(create_venting_conversation())
         application.add_handler(create_support_conversation())
         
-        # הוספת panic_conv
-        application.add_handler(panic_conv)
+        # הוספת panic_conv_handler
+        application.add_handler(panic_conv_handler)
         
         # הוספת handlers כלליים
         application.add_handler(CommandHandler("start", start))
