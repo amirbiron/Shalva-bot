@@ -39,8 +39,8 @@ FULL_DESC, FULL_ANXIETY, FULL_LOCATION, FULL_PEOPLE, FULL_WEATHER = range(5)
 # פריקה חופשית
 FREE_VENTING, VENTING_SAVE = range(2)
 
-# שיחת תמיכה
-SUPPORT_CHAT = range(17)
+# שיחת תמיכה יחידת מצב
+SUPPORT_ACTIVE = range(1)
 
 # -----------------------------------------------------------------
 # Panic feature global definitions (states and techniques)
@@ -221,11 +221,19 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
 # =================================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """פונקציית התחלה עם הודעת הסבר למשתמשים חדשים"""
+    """פונקציית התחלה משופרת שגם מנקה שיחות תקועות."""
     await ensure_user_in_db(update)
     user_id = update.effective_user.id
     
-    # בדיקה אם המשתמש קיים במערכת
+    # --- קו הגנה חדש: ניקוי אקטיבי של שיחת AI ---
+    # בודקים אם קיימים נתונים של שיחת AI ומנקים אותם.
+    if 'gemini_model' in context.user_data or 'chat_history' in context.user_data:
+        context.user_data.pop('gemini_model', None)
+        context.user_data.pop('chat_history', None)
+        logger.info(f"Forcefully cleaned up a stuck AI conversation for user {user_id}.")
+    # ----------------------------------------------------
+
+    # בדיקה אם המשתמש קיים במערכת (הקוד הקיים שלך)
     conn = sqlite3.connect('anxiety_data.db')
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,))
@@ -233,9 +241,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("INSERT INTO user_settings (user_id) VALUES (?)", (user_id,))
         conn.commit()
     conn.close()
-    
-    # בדיקה אם המשתמש כבר ראה את טיפ האיפוס
-    is_new_user = users_collection.count_documents({"chat_id": user_id, "has_seen_tip": {"$exists": True}}) == 0
     
     welcome_message = """
 🤗 שלום ויפה שהגעת! 
@@ -253,21 +258,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔒 הכל נשאר רק אצלך ופרטי לחלוטין.
 
+💡 **טיפ חשוב:** אם אי פעם הבוט מפסיק להגיב, לחץ על כפתור "🏠 התחלה / איפוס" בתחתית המסך. זה יפתור את הבעיה ברוב המקרים!
+
 קח את הזמן שלך, ובחר מה מתאים לך עכשיו:
 """
     
     await update.message.reply_text(welcome_message, reply_markup=get_main_keyboard())
     
-    if is_new_user:
-        tip_message = (
-            "💡 **טיפ חשוב:**\n"
-            "לפעמים, אם קופצים מהר בין פעולות, הבוט עלול \"להתבלבל\".\n"
-            "אם אי פעם כפתור מסוים לא מגיב, פשוט לחצו על כפתור '🏠 התחלה / איפוס'. זה יפתור את הבעיה ברוב המקרים!"
-        )
-        await update.message.reply_text(tip_message, parse_mode='Markdown')
-        users_collection.update_one({"chat_id": user_id}, {"$set": {"has_seen_tip": True}})
-    
-    # הצעה למוזיקה מרגיעה
+    # הצעה למוזיקה מרגיעה (כפי שביקשת, החלק הזה נשאר)
     music_keyboard = [
         [InlineKeyboardButton("🎵 כן, אשמח לשיר מרגיע", callback_data="relaxing_music")],
         [InlineKeyboardButton("🚀 לא, בוא נתחיל", callback_data="start_using")]
@@ -642,16 +640,16 @@ async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
 
     context.user_data['gemini_model'] = genai.GenerativeModel('gemini-1.5-flash')
-    opening_message = "אני כאן, איתך. מה יושב לך על הלב?\nכדי לסיים, שלח /end_chat. כדי לחזור לתפריט הראשי בכל שלב, שלח /start."
+    opening_message = "אני כאן, איתך. מה יושב לך על הלב?\nכדי לסיים את השיחה ולחזור לתפריט, שלח /end_chat."
     context.user_data['chat_history'] = [{'role': 'user', 'parts': [EMPATHY_PROMPT]}, {'role': 'model', 'parts': [opening_message]}]
     await query.edit_message_text(text=opening_message)
-    return SUPPORT_CHAT
+    return SUPPORT_ACTIVE
 
 async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_message = update.message.text
     model = context.user_data.get('gemini_model')
     if not model:
-        await update.message.reply_text("אני מתנצל, נתקלתי בבעיה. נסה להתחיל מחדש עם /start.")
+        await update.message.reply_text("אופס, נראה שהשיחה התאפסה. נסה להתחיל מחדש מהתפריט.", reply_markup=get_main_keyboard())
         return ConversationHandler.END
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
@@ -661,12 +659,14 @@ async def handle_support_message(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data['chat_history'].append({'role': 'user', 'parts': [user_message]})
     context.user_data['chat_history'].append({'role': 'model', 'parts': [bot_response]})
     await update.message.reply_text(bot_response)
-    return SUPPORT_CHAT
+    return SUPPORT_ACTIVE
 
 async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("שמחתי להיות כאן בשבילך. אני תמיד כאן אם תצטרך אותי שוב. ❤️\nכדי לחזור לתפריט הראשי, הקלד /start.")
-    if 'chat_history' in context.user_data: del context.user_data['chat_history']
-    if 'gemini_model' in context.user_data: del context.user_data['gemini_model']
+    """פונקציית יציאה ייעודית ונקייה לשיחת ה-AI."""
+    await update.message.reply_text("שמחתי להיות כאן בשבילך. אני תמיד כאן אם תצטרך אותי שוב. ❤️", reply_markup=get_main_keyboard())
+    # ניקוי נתונים
+    context.user_data.pop('gemini_model', None)
+    context.user_data.pop('chat_history', None)
     return ConversationHandler.END
 
 # =================================================================
@@ -795,13 +795,16 @@ def create_venting_conversation():
     )
 
 def create_support_conversation():
-    """יצירת שיחת תמיכה"""
+    """יצירת שיחת תמיכה עם יציאה בטוחה וברורה."""
     return ConversationHandler(
         entry_points=[CallbackQueryHandler(start_support_chat, pattern='^support_chat$')],
-        states={SUPPORT_CHAT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message)]},
-        fallbacks=[CommandHandler('end_chat', end_support_chat), CommandHandler('start', start)],
-        per_user=True,
-        per_chat=True,
+        states={
+            SUPPORT_ACTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_support_message)]
+        },
+        # מגדירים רק דרך יציאה אחת ויחידה!
+        fallbacks=[CommandHandler('end_chat', end_support_chat)],
+        # חשוב: מונעים מהשיחה להישאר פעילה לנצח על ידי קביעת timeout
+        conversation_timeout=timedelta(minutes=30).total_seconds()
     )
 
 # =================================================================
@@ -856,7 +859,7 @@ def get_immediate_recommendation(anxiety_level):
     if anxiety_level >= 8:
         return "🚨 רמת חרדה גבוהה! נסה טכניקת נשימה 4-4-6 עכשיו: שאף 4 שניות, עצור 4, נשוף 6. אם זה ממשיך, שקול לפנות לעזרה מקצועית."
     elif anxiety_level >= 6:
-        return "⚠️ חרדה ברמה בינונית. נסה לזהות מה גורם לזה ולהשתמש בטכניקת 5-4-3-2-1: מצא 5 דברים שאתה רואה, 4 שאתה שומע, 3 שאתה מרגיש, 2 שאתה מריח, 1 שאתה טועם."
+        return "⚠️ חרדה ברמה בינונית. נסה לזהות מה גורם לזה ולהשתמש בטכניקת 5-4-3-2-1. בנוסף ממליץ לך להמשיך לשאר הפונקציות של הבוט :)"
     elif anxiety_level >= 4:
         return "💛 חרדה קלה. זה הזמן הטוב לנשימה עמוקה ולהזכיר לעצמך שזה יעבור. נסה לשתות מים קרים או לצאת לאוויר צח."
     else:
@@ -1808,7 +1811,7 @@ panic_conv_handler = ConversationHandler(
 # =================================================================
 
 def main():
-    """פונקציה ראשית - ConversationHandler Version"""
+    """פונקציה ראשית עם סדר הוספת מטפלים נכון."""
     try:
         # יצירת בסיס נתונים
         init_database()
@@ -1816,24 +1819,30 @@ def main():
         # יצירת האפליקציה
         application = Application.builder().token(BOT_TOKEN).build()
         
-        # הוספת ConversationHandlers - סדר חשוב!
-        application.add_handler(panic_conv_handler)  # רישום panic_conv_handler קודם
+        # --- סדר נכון של הוספת מטפלים ---
+        
+        # 1. הוספת ConversationHandlers - הם מקבלים עדיפות ראשונה
+        application.add_handler(create_support_conversation())
+        application.add_handler(panic_conv_handler)
         application.add_handler(create_quick_report_conversation())
         application.add_handler(create_full_report_conversation())
         application.add_handler(create_venting_conversation())
-        application.add_handler(create_support_conversation())
         
-        # הוספת handlers כלליים
+        # 2. הוספת פקודות כלליות
         application.add_handler(CommandHandler("start", start))
+        
+        # 3. הוספת מטפלים לכפתורי Inline שאינם חלק משיחה
         application.add_handler(CallbackQueryHandler(handle_callback_query))
+        
+        # 4. בסוף, הוספת מטפל כללי להודעות טקסט (כפתורים מהמקלדת הראשית)
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_general_message))
         
-        # הוספת error handler
+        # 5. הוספת error handler
         application.add_error_handler(error_handler)
         
         # הרצת הבוט
-        logger.info("🚀 הבוט החדש עם ConversationHandler מתחיל לרוץ...")
-        print("✅ הבוט פעיל עם ConversationHandler! לחץ Ctrl+C לעצירה")
+        logger.info("🚀 הבוט בגרסה 13.1 מתחיל לרוץ...")
+        print("✅ הבוט פעיל! לחץ Ctrl+C לעצירה")
         application.run_polling()
             
     except Exception as e:
