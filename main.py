@@ -136,15 +136,26 @@ LOCATION_OPTIONS = ['🏠 בית', '🏢 עבודה', '🚗 רחוב', '🛒 ק�
 PEOPLE_OPTIONS = ['👤 לבד', '👥 עם חברים', '👔 קולגות', '👨‍👩‍👧‍👦 משפחה', '👥 זרים', '👥 אחר']
 WEATHER_OPTIONS = ['☀️ שמש', '🌧️ גשם', '☁️ מעונן', '🔥 חם', '❄️ קר', '🌤️ אחר']
 
+# רשימת טקסטים של כפתורים בתפריט הראשי
+MAIN_MENU_BUTTONS = [
+    "⚡ דיווח מהיר", "🔍 דיווח מלא",
+    "🗣️ פריקה חופשית", "📈 גרפים והיסטוריה",
+    "🎵 שירים מרגיעים", "💡 עזרה כללית",
+    "💬 זקוק/ה לאוזן קשבת", "🔴 אני במצוקה", "⚙️ הגדרות",
+    "🏠 התחלה / איפוס"
+]
+MAIN_MENU_REGEX = "^(" + "|".join(MAIN_MENU_BUTTONS) + ")$"
+
 def get_main_keyboard():
-    """יצירת מקלדת ראשית"""
+    """יצירת מקלדת ראשית עם כפתור איפוס"""
     keyboard = [
+        [KeyboardButton("🏠 התחלה / איפוס")],
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
         [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("🔴 אני במצוקה"), KeyboardButton("⚙️ הגדרות")]
     ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
 def get_anxiety_level_keyboard():
     """יצירת מקלדת לבחירת רמת חרדה"""
@@ -210,7 +221,7 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
 # =================================================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """פונקציית התחלה"""
+    """פונקציית התחלה עם הודעת הסבר למשתמשים חדשים"""
     await ensure_user_in_db(update)
     user_id = update.effective_user.id
     
@@ -222,6 +233,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("INSERT INTO user_settings (user_id) VALUES (?)", (user_id,))
         conn.commit()
     conn.close()
+    
+    # בדיקה אם המשתמש כבר ראה את טיפ האיפוס
+    is_new_user = users_collection.count_documents({"chat_id": user_id, "has_seen_tip": {"$exists": True}}) == 0
     
     welcome_message = """
 🤗 שלום ויפה שהגעת! 
@@ -244,6 +258,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(welcome_message, reply_markup=get_main_keyboard())
     
+    if is_new_user:
+        tip_message = (
+            "💡 **טיפ חשוב:**\n"
+            "לפעמים, אם קופצים מהר בין פעולות, הבוט עלול \"להתבלבל\".\n"
+            "אם אי פעם כפתור מסוים לא מגיב, פשוט לחצו על כפתור '🏠 התחלה / איפוס'. זה יפתור את הבעיה ברוב המקרים!"
+        )
+        await update.message.reply_text(tip_message, parse_mode='Markdown')
+        users_collection.update_one({"chat_id": user_id}, {"$set": {"has_seen_tip": True}})
+    
     # הצעה למוזיקה מרגיעה
     music_keyboard = [
         [InlineKeyboardButton("🎵 כן, אשמח לשיר מרגיע", callback_data="relaxing_music")],
@@ -259,6 +282,11 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
     """טיפול בהודעות כלליות שלא במסגרת שיחה"""
     await ensure_user_in_db(update)
     text = update.message.text
+    
+    # טיפול בכפתור האיפוס החדש
+    if text == "🏠 התחלה / איפוס":
+        await start(update, context)
+        return
     
     # טיפול בכפתורי התפריט הראשי - תמיד פעילים
     if text == "📈 גרפים והיסטוריה":
@@ -345,15 +373,20 @@ async def complete_quick_report(update: Update, context: ContextTypes.DEFAULT_TY
     conn.commit()
     conn.close()
     
-    # מתן המלצה מיידית
-    recommendation = get_immediate_recommendation(anxiety_level)
+    # המלצה חדשה בהתאם לרמה
+    if anxiety_level >= 8:
+        recommendation = "🚨 רמת חרדה גבוהה! אולי תנסה טכניקת נשימה 4-4-6? שאף 4 שניות, עצור 4, נשוף 6. בנוסף ממליץ לך להמשיך לשאר הפונקציות של הבוט :)"
+    elif anxiety_level >= 6:
+        recommendation = "⚠️ חרדה ברמה בינונית. נסה לזהות מה גורם לזה ולהשתמש בטכניקת 5-4-3-2-1. בנוסף ממליץ לך להמשיך לשאר הפונקציות של הבוט :)"
+    else:
+        recommendation = "💛 חרדה קלה-נמוכה. כל הכבוד על המודעות, זה הזמן לחזק את ההרגשה הטובה עם שאר הפונקציות של הבוט :)"
     
     message = f"""
 ✅ דיווח נשמר בהצלחה!
 
 📊 הדיווח שלך:
 • רמת חרדה: {anxiety_level}/10
-• זמן: {datetime.strptime(context.user_data['timestamp'], '%Y-%m-%d %H:%M:%S').strftime("%H:%M")}
+• זמן: {datetime.strptime(context.user_data['timestamp'], '%Y-%m-%d %H:%M:%S').strftime('%H:%M')}
 • תיאור: {context.user_data['description'][:50]}{'...' if len(context.user_data['description']) > 50 else ''}
 
 💡 המלצה מיידית:
@@ -641,69 +674,124 @@ async def end_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 # =================================================================
 
 def create_quick_report_conversation():
-    """יצירת שיחת דיווח מהיר"""
+    """יצירת שיחת דיווח מהיר עם טיפול בקפיצה לפעולה אחרת"""
+    
+    async def ask_to_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        keyboard = [[
+            InlineKeyboardButton("✅ כן, בטל את הדיווח", callback_data="cancel_conversation"),
+            InlineKeyboardButton("❌ לא, אמשיך לדווח", callback_data="continue_conversation")
+        ]]
+        await update.message.reply_text(
+            "🤔 נראה שניסית להתחיל פעולה חדשה. האם לבטל את הדיווח המהיר הנוכחי?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return QUICK_DESC
+
+    async def perform_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("❌ הדיווח בוטל. כעת תוכל לבחור פעולה חדשה מהתפריט.")
+        return ConversationHandler.END
+
+    async def perform_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("ממשיכים בדיווח. מה קורה עכשיו?")
+        return QUICK_DESC
+
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^⚡ דיווח מהיר$"), start_quick_report)],
         states={
             QUICK_DESC: [
-                MessageHandler(filters.Regex("^📈 גרפים והיסטוריה$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_quick_description)
+                MessageHandler(filters.Regex(MAIN_MENU_REGEX), ask_to_cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(MAIN_MENU_REGEX), get_quick_description),
+                CallbackQueryHandler(perform_cancel, pattern="^cancel_conversation$"),
+                CallbackQueryHandler(perform_continue, pattern="^continue_conversation$"),
             ],
             QUICK_ANXIETY: [CallbackQueryHandler(complete_quick_report, pattern="^anxiety_")]
         },
-        fallbacks=[
-            CommandHandler("start", cancel_quick_report),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_quick_report)
-        ]
+        fallbacks=[CommandHandler("start", cancel_quick_report)]
     )
 
 def create_full_report_conversation():
-    """יצירת שיחת דיווח מלא"""
+    """יצירת שיחת דיווח מלא עם טיפול בקפיצה לפעולה אחרת"""
+    async def ask_to_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        keyboard = [[
+            InlineKeyboardButton("✅ כן, בטל את הדיווח", callback_data="cancel_conversation"),
+            InlineKeyboardButton("❌ לא, אמשיך לדווח", callback_data="continue_conversation")
+        ]]
+        await update.message.reply_text(
+            "🤔 נראה שניסית להתחיל פעולה חדשה. האם לבטל את הדיווח המלא הנוכחי?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return FULL_DESC
+
+    async def perform_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("❌ הדיווח בוטל. כעת תוכל לבחור פעולה חדשה מהתפריט.")
+        return ConversationHandler.END
+
+    async def perform_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("ממשיכים בדיווח המלא. מה קורה עכשיו?")
+        return FULL_DESC
+
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🔍 דיווח מלא$"), start_full_report)],
         states={
             FULL_DESC: [
-                MessageHandler(filters.Regex("^📈 גרפים והיסטוריה$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_full_description)
+                MessageHandler(filters.Regex(MAIN_MENU_REGEX), ask_to_cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(MAIN_MENU_REGEX), get_full_description),
+                CallbackQueryHandler(perform_cancel, pattern="^cancel_conversation$"),
+                CallbackQueryHandler(perform_continue, pattern="^continue_conversation$"),
             ],
             FULL_ANXIETY: [CallbackQueryHandler(get_full_anxiety_level, pattern="^anxiety_")],
             FULL_LOCATION: [CallbackQueryHandler(get_full_location, pattern="^location_")],
             FULL_PEOPLE: [CallbackQueryHandler(get_full_people, pattern="^people_")],
             FULL_WEATHER: [CallbackQueryHandler(complete_full_report, pattern="^weather_")]
         },
-        fallbacks=[
-            CommandHandler("start", cancel_full_report),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_full_report),
-        ]
+        fallbacks=[CommandHandler("start", cancel_full_report)]
     )
 
 def create_venting_conversation():
-    """יצירת שיחת פריקה חופשית"""
+    """יצירת שיחת פריקה חופשית עם טיפול בקפיצה לפעולה אחרת"""
+    async def ask_to_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        keyboard = [[
+            InlineKeyboardButton("✅ כן, בטל את הפריקה", callback_data="cancel_conversation"),
+            InlineKeyboardButton("❌ לא, אמשיך", callback_data="continue_conversation")
+        ]]
+        await update.message.reply_text(
+            "🤔 נראה שניסית להתחיל פעולה חדשה. האם לבטל את הפריקה החופשית הנוכחית?",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return FREE_VENTING
+
+    async def perform_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("❌ הפריקה בוטלה. כעת תוכל לבחור פעולה חדשה מהתפריט.")
+        return ConversationHandler.END
+
+    async def perform_continue(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        await query.edit_message_text("ממשיכים בפריקה. אני מקשיב…")
+        return FREE_VENTING
+
     return ConversationHandler(
         entry_points=[MessageHandler(filters.Regex("^🗣️ פריקה חופשית$"), start_free_venting)],
         states={
             FREE_VENTING: [
-                MessageHandler(filters.Regex("^📈 גרפים והיסטוריה$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^🎵 שירים מרגיעים$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^💡 עזרה כללית$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^⚙️ הגדרות$"), handle_menu_during_conversation),
-                MessageHandler(filters.Regex("^💬 זקוק/ה לאוזן קשבת$"), handle_menu_during_conversation),
-                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex("^(📈 גרפים והיסטוריה|🎵 שירים מרגיעים|💡 עזרה כללית|⚙️ הגדרות|💬 זקוק/ה לאוזן קשבת)$"), get_venting_content)
+                MessageHandler(filters.Regex(MAIN_MENU_REGEX), ask_to_cancel),
+                MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(MAIN_MENU_REGEX), get_venting_content),
+                CallbackQueryHandler(perform_cancel, pattern="^cancel_conversation$"),
+                CallbackQueryHandler(perform_continue, pattern="^continue_conversation$"),
             ],
             VENTING_SAVE: [CallbackQueryHandler(save_venting_choice, pattern="^save_venting_")]
         },
-        fallbacks=[
-            CommandHandler("start", cancel_venting),
-            MessageHandler(filters.Regex("^❌ ביטול$"), cancel_venting)
-        ]
+        fallbacks=[CommandHandler("start", cancel_venting)]
     )
 
 def create_support_conversation():
@@ -1454,17 +1542,18 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 # --- Panic Feature Functions (גרסה 9 - שינוי טקסט כפתור) ---
 # =================================================================
 
-async def suggest_ai_chat_and_end(query) -> int:
+async def suggest_ai_chat_and_end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """שולח את הודעת הסיום הממליצה על שיחה עם AI ומסיים את השיחה."""
+    query = update.callback_query
     final_text = (
         "נגמרו לי ההצעות במאגר, תמיד תוכל ללחוץ על לחצן המצוקה כדי להתחיל סבב נוסף.\n"
         "ממליץ לך בחום לעבור ללחצן \"זקוק/ה לאוזן קשבת?\", תוכל לנהל שיחה עם סוכן בינה מלאכותית אדיב, מכיל ואמפתי 🩵"
     )
-    if hasattr(query, 'edit_message_text'):
+    try:
         await query.edit_message_text(text=final_text)
-    else:
-        await context.bot.send_message(chat_id=query.effective_chat.id, text=final_text)
-
+    except Exception as e:
+        logger.error(f"Failed to edit message in suggest_ai_chat_and_end: {e}")
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=final_text)
     return ConversationHandler.END
 
 async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1567,11 +1656,12 @@ async def ask_scale_if_needed(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     if not context.user_data.get('scale_asked', False):
         context.user_data['scale_asked'] = True
         question = "איך אתה מרגיש עכשיו, זה עזר?"
-        scale_kb = [[InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(0, 11)]]
-        
+        row1 = [InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(0, 6)]
+        row2 = [InlineKeyboardButton(str(i), callback_data=f"panic_scale_{i}") for i in range(6, 11)]
+        scale_kb = [row1, row2]
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{question}\nדרג מ-0 (רגוע לחלוטין) עד 10 (הכי חרד שאפשר):",
+            text=f"{question}\nדרג מ-0 (רגוע) עד 10 (הכי חרד):",
             reply_markup=InlineKeyboardMarkup(scale_kb)
         )
 
@@ -1601,7 +1691,7 @@ async def handle_scale(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     context.user_data["attempts"] = context.user_data.get("attempts", 0) + 1
     if context.user_data["attempts"] >= 2:
-        return await suggest_ai_chat_and_end(query)
+        return await suggest_ai_chat_and_end(update, context)
 
     return await offer_extra(update, context)
 
