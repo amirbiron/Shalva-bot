@@ -55,9 +55,29 @@ client: MongoClient = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 collection = db[COLLECTION_NAME]
 
-# Ensure indexes for efficient queries
-collection.create_index([("user_id", ASCENDING)], unique=True)
-collection.create_index([("last_activity", DESCENDING)])
+# Ensure indexes for efficient queries – clean bad data & handle errors gracefully
+try:
+    # Remove documents with missing or invalid user_id BEFORE creating the unique index
+    cleanup_result = collection.delete_many(
+        {
+            "$or": [
+                {"user_id": None},
+                {"user_id": ""},
+                {"user_id": {"$exists": False}},
+            ]
+        }
+    )
+
+    if cleanup_result.deleted_count:
+        # Using print here – no logger configured for this standalone script
+        print(f"Cleaned {cleanup_result.deleted_count} invalid user records")
+
+    collection.create_index([("user_id", ASCENDING)], unique=True)
+    collection.create_index([("last_activity", DESCENDING)])
+    print("Activity tracking indexes created successfully")
+except Exception as e:
+    # Catch any error (e.g. duplicate keys) so that the bot can still start
+    print(f"Could not create activity-tracking indexes: {e}")
 
 # -----------------------------------------------------------------------------
 # Utility Functions
