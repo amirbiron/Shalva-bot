@@ -10,8 +10,6 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from collections import Counter
 import asyncio
 from datetime import datetime
-from typing import List, Optional  # NEW: types for activity tracker
-from pymongo import ASCENDING, DESCENDING  # NEW: index helpers
 
 
 # -----------------------------
@@ -24,13 +22,6 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# NEW: Owner user id for admin-only commands
-try:
-    OWNER_USER_ID: int = int(os.getenv("OWNER_USER_ID", "0"))
-except ValueError:
-    OWNER_USER_ID = 0
-if OWNER_USER_ID == 0:
-    raise ValueError("FATAL: OWNER_USER_ID not found in environment variables!")
 
 if not BOT_TOKEN or not MONGO_URI:
     raise ValueError("FATAL: BOT_TOKEN or MONGO_URI not found in environment variables!")
@@ -120,189 +111,6 @@ try:
 except Exception as e:
     logger.error(f"Could not connect to MongoDB: {e}")
     exit()
-
-# -----------------------------------------------------------------
-# Activity Tracking – collection alias, indexes and helper functions
-# -----------------------------------------------------------------
-
-# Use the same users collection for the activity-tracking logic
-collection = users_collection  # alias for readability
-
-# Ensure indexes required by the activity-tracking features (safe to run repeatedly)
-try:
-    # Delete documents with missing or invalid user_id BEFORE creating the unique index
-    cleanup_result = collection.delete_many(
-        {
-            "$or": [
-                {"user_id": None},
-                {"user_id": ""},
-                {"user_id": {"$exists": False}},
-            ]
-        }
-    )
-
-    if cleanup_result.deleted_count:
-        logger.info(f"Cleaned {cleanup_result.deleted_count} invalid user records")
-
-    collection.create_index([("user_id", ASCENDING)], unique=True)
-    collection.create_index([("last_activity", DESCENDING)])
-    logger.info("Activity tracking indexes created successfully")
-except Exception as idx_e:
-    logger.warning(f"Index setup warning: {idx_e}")
-
-
-# -----------------------------------------------------------------
-# Utility – human-readable timedelta in Hebrew
-# -----------------------------------------------------------------
-
-def human_timedelta_hebrew(past: datetime, now: Optional[datetime] = None) -> str:
-    """Return a human-readable relative time difference in Hebrew."""
-    now = now or datetime.utcnow()
-    delta = now - past
-    minutes = int(delta.total_seconds() // 60)
-
-    if minutes < 60:
-        return f"לפני {minutes} דקות" if minutes != 1 else "לפני דקה"
-
-    hours = minutes // 60
-    if hours < 24:
-        return f"לפני {hours} שעות" if hours != 1 else "לפני שעה"
-
-    days = hours // 24
-    return f"לפני {days} ימים" if days != 1 else "לפני יום"
-
-
-# -----------------------------------------------------------------
-# Decorator limiting access to the bot owner only
-# -----------------------------------------------------------------
-
-def owner_only(func):
-    async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-        user = update.effective_user
-        if user and user.id == OWNER_USER_ID:
-            return await func(update, context, *args, **kwargs)
-        # Deny access politely
-        if update.message:
-            await update.message.reply_text("🚫 אין לך הרשאות להשתמש בפקודה זו.")
-        elif update.callback_query:
-            await update.callback_query.answer("🚫 אין לך הרשאות.", show_alert=True)
-        return
-    return wrapped
-
-
-# -----------------------------------------------------------------
-# Message listener – track every regular user message
-# -----------------------------------------------------------------
-
-async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Ignore bots (including ourselves)
-    if update.effective_user is None or update.effective_user.is_bot:
-        return
-
-    user = update.effective_user
-    username_display = user.username or f"{user.first_name} {user.last_name or ''}".strip()
-
-    payload = {
-        "$set": {
-            "username": username_display,
-            "last_activity": datetime.utcnow(),
-        },
-        "$inc": {"total_messages": 1},
-    }
-    collection.update_one({"user_id": user.id}, payload, upsert=True)
-
-
-# -----------------------------------------------------------------
-# Owner-only command handlers
-# -----------------------------------------------------------------
-
-@owner_only
-async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/recent_users <days> – list users active within the last X days (default 7)."""
-    try:
-        days = int(context.args[0]) if context.args else 7
-        days = max(days, 1)
-    except ValueError:
-        days = 7
-
-    threshold = datetime.utcnow() - timedelta(days=days)
-    cursor = collection.find({"last_activity": {"$gte": threshold}}).sort("last_activity", DESCENDING)
-    users: List[dict] = list(cursor)
-
-    if not users:
-        await update.message.reply_text("לא נמצאו משתמשים פעילים בטווח הזמן המבוקש.")
-        return
-
-    lines = [f"🟢 משתמשים פעילים ב־{days} הימים האחרונים:"]
-    for user in users:
-        relative = human_timedelta_hebrew(user.get("last_activity"))
-        lines.append(
-            f"• {user.get('username', user['user_id'])} — {relative} | סה\"כ הודעות: {user.get('total_messages', 0)}"
-        )
-
-    await update.message.reply_text("\n".join(lines))
-
-
-@owner_only
-async def user_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """/user_info [user_id] – show stored activity for a user (default self)."""
-    target_user_id: Optional[int] = None
-    if context.args:
-        try:
-            target_user_id = int(context.args[0])
-        except ValueError:
-            pass
-    if target_user_id is None:
-        target_user_id = update.effective_user.id
-
-    record = collection.find_one({"user_id": target_user_id})
-    if record is None:
-        await update.message.reply_text("לא נמצאה פעילות עבור המשתמש.")
-        return
-
-    text = (
-        f"👤 מידע על {record.get('username', target_user_id)}\n"
-        f"מזהה: {record['user_id']}\n"
-        f"הודעה אחרונה: {human_timedelta_hebrew(record['last_activity'])}\n"
-        f"סה\"כ הודעות: {record.get('total_messages', 0)}"
-    )
-    await update.message.reply_text(text)
-
-
-@owner_only
-async def admin_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [
-            InlineKeyboardButton("🟢 משתמשים פעילים", callback_data="menu_recent_users"),
-            InlineKeyboardButton("👤 מידע עליי", callback_data="menu_my_info"),
-        ],
-        [
-            InlineKeyboardButton("📊 סטטיסטיקות", callback_data="menu_stats"),
-            InlineKeyboardButton("🗑️ נקה ישנים", callback_data="menu_cleanup"),
-        ],
-    ]
-    await update.message.reply_text("תפריט ניהול:", reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-@owner_only
-async def admin_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data or ""
-    if data == "menu_recent_users":
-        context.args = []
-        await recent_users(update, context)
-    elif data == "menu_my_info":
-        context.args = []
-        await user_info(update, context)
-    elif data == "menu_stats":
-        await query.edit_message_text("📊 פיצ'ר סטטיסטיקות טרם יושם.")
-    elif data == "menu_cleanup":
-        threshold = datetime.utcnow() - timedelta(days=365)
-        result = collection.delete_many({"last_activity": {"$lt": threshold}})
-        await query.edit_message_text(f"🗑️ נמחקו {result.deleted_count} משתמשים לא פעילים.")
-    else:
-        await query.edit_message_text("❓ פעולה לא מוכרת.")
 
 # --- פונקציית עזר לשמירת משתמש ---
 async def ensure_user_in_db(update: Update):
@@ -2020,17 +1828,6 @@ def main():
         application.add_handler(create_full_report_conversation())
         application.add_handler(create_venting_conversation())
         
-        # 1.2 הוספת מאזין למעקב פעילות (לפני כל שאר המטפלים הכלליים)
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_activity))
-
-        # 1.3 הוספת פקודות ניהול לבעלים בלבד
-        application.add_handler(CommandHandler("recent_users", recent_users))
-        application.add_handler(CommandHandler("user_info", user_info))
-        application.add_handler(CommandHandler("admin_menu", admin_menu))
-
-        # 1.4 CallbackQueryHandler עבור תפריט הניהול
-        application.add_handler(CallbackQueryHandler(admin_menu_callback, pattern="^menu_"))
-
         # 2. הוספת פקודות כלליות
         application.add_handler(CommandHandler("start", start))
         
