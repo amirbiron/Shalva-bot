@@ -1849,32 +1849,42 @@ def owner_only(func):
     return wrapper
 
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """עדכון חותמת זמן אחרונה של משתמש בכל הודעת טקסט."""
-    user = update.effective_user
-    # הדפסה לצורך דיבוג תחילת מעקב פעילות
-    if user:
-        print(f"Tracking activity for user {user.id}: {user.username}")
-    else:
-        print("Tracking activity: user not found")
-    if not user:
-        return
+    """עדכון חותמת זמן אחרונה של משתמש בכל הודעת טקסט עם דיבוג מפורט."""
+    try:
+        user = update.effective_user
 
-    now = datetime.utcnow()
+        # ----------------------------------------------------------
+        # Debugging output
+        # ----------------------------------------------------------
+        print("=== TRACK ACTIVITY DEBUG ===")
+        print(f"User: {user.id if user else 'None'} - {user.first_name if user else 'None'}")
 
-    users_collection.update_one(
-        {"chat_id": user.id},
-        {
-            "$set": {
-                "first_name": user.first_name,
-                "username": user.username,
-                "last_seen": now,
+        if not user:
+            print("No user found, returning")
+            return
+
+        now = datetime.utcnow()
+        print("Attempting to save to MongoDB...")
+
+        result = users_collection.update_one(
+            {"chat_id": user.id},
+            {
+                "$set": {
+                    "first_name": user.first_name,
+                    "username": user.username,
+                    "last_seen": now,
+                },
+                "$setOnInsert": {"first_seen": now},
             },
-            "$setOnInsert": {"first_seen": now},
-        },
-        upsert=True,
-    )
-    # הדפסה לאחר שמירה במונגו
-    print("Activity saved to MongoDB")
+            upsert=True,
+        )
+
+        print(
+            f"MongoDB result: matched={result.matched_count}, modified={result.modified_count}, upserted={result.upserted_id}"
+        )
+        print("=== END DEBUG ===")
+    except Exception as e:
+        print(f"ERROR in track_activity: {e}")
 
 @owner_only
 async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
