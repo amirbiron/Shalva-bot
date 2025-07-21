@@ -224,8 +224,6 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """פונקציית התחלה משופרת שגם מנקה שיחות תקועות."""
-    # מעקב פעילות גלובלי
-    await track_activity(update, context)
     await ensure_user_in_db(update)
     user_id = update.effective_user.id
     
@@ -821,8 +819,6 @@ def create_support_conversation():
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בלחיצות על כפתורים כלליים"""
-    # מעקב פעילות גלובלי עבור CallbackQuery
-    await track_activity(update, context)
     await ensure_user_in_db(update)
     query = update.callback_query
     await query.answer()
@@ -1857,28 +1853,27 @@ def owner_only(func):
     return wrapper
 
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """עדכון פעילות משתמש: חותמת זמן, ספירת הודעות וביקורים שבועיים."""
+    """עדכון חותמת זמן אחרונה של משתמש בכל הודעת טקסט."""
     user = update.effective_user
+    # הדפסה לצורך דיבוג תחילת מעקב פעילות
+    if user:
+        print(f"Tracking activity for user {user.id}: {user.username}")
+    else:
+        print("Tracking activity: user not found")
     if not user:
         return
 
     now = datetime.utcnow()
-    # תחילת השבוע (יום שני) בפורמט ISO, לדוגמה: '2024-07-15'
-    week_start = (now - timedelta(days=now.weekday())).date().isoformat()
 
     users_collection.update_one(
         {"chat_id": user.id},
         {
             "$set": {
-                "user_id": user.id,
                 "first_name": user.first_name,
                 "username": user.username,
                 "last_seen": now,
             },
-            "$setOnInsert": {"first_seen": now, "total_messages": 0},
-            "$inc": {"total_messages": 1},
-            # שומר את תאריכי הביקור הייחודיים בכל שבוע
-            "$addToSet": {f"weekly_visits.{week_start}": now.date().isoformat()},
+            "$setOnInsert": {"first_seen": now},
         },
         upsert=True,
     )
@@ -1887,10 +1882,11 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @owner_only
 async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """שליחת רשימת משתמשים פעילים בשבעת הימים האחרונים לבעל הבוט, כולל מספר ימי הביקור השבוע."""
+    """שליחת רשימת משתמשים פעילים ב-24 השעות האחרונות לבעל הבוט."""
     now = datetime.utcnow()
-    threshold = now - timedelta(days=7)
-    week_start = (now - timedelta(days=now.weekday())).date().isoformat()
+    threshold = now - timedelta(days=1)
+    # הדפסה לצורך דיבוג
+    print(f"Searching for users active since: {threshold}")
 
     recent_cursor = (
         users_collection.find(
@@ -1906,26 +1902,23 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     recent_list = list(recent_cursor)
-
+    print(f"Found {len(recent_list)} users")
+    if recent_list:
+        print(f"Sample user: {recent_list[0]}")
     if not recent_list:
-        await update.message.reply_text("אין משתמשים פעילים בשבוע האחרון.")
+        await update.message.reply_text("אין משתמשים פעילים בזמן האחרון.")
         return
 
-    lines = []
+    lines: list[str] = []
     for idx, usr in enumerate(recent_list, 1):
+        # Pick the most recent timestamp between last_seen and last_activity
         last_seen = usr.get("last_seen")
         last_activity = usr.get("last_activity")
-        last_time = max(filter(None, [last_seen, last_activity])) if (last_seen or last_activity) else now
-
-        delta_str = human_timedelta_hebrew(last_time, now)
+        last_time = max(filter(None, [last_seen, last_activity])) if (last_seen or last_activity) else None
+        delta_str = human_timedelta_hebrew(last_time, now) if last_time else "לא ידוע"
         name = usr.get("first_name", "")
         username = f"@{usr.get('username')}" if usr.get("username") else ""
-
-        weekly_visits = usr.get("weekly_visits", {}).get(week_start, [])
-        days_count = len(weekly_visits) if weekly_visits else 0
-        days_text = f"({days_count} ימים השבוע)" if days_count > 0 else ""
-
-        lines.append(f"{idx}. {name} {username} – {delta_str} {days_text}")
+        lines.append(f"{idx}. {name} {username} – {delta_str}")
 
     await update.message.reply_text("\n".join(lines))
 
@@ -1940,11 +1933,6 @@ async def debug_mongo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"Total docs: {total}\nWith last_seen: {recent}\nSample: {sample}"
     )
-
-# === Global activity handler ===
-async def global_activity_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """מעקב גלובלי אחרי כל פעילות."""
-    await track_activity(update, context)
 
 # =================================================================
 # Main Function
@@ -1964,12 +1952,6 @@ def main():
         application = Application.builder().token(BOT_TOKEN).build()
         
         # --- סדר נכון של הוספת מטפלים ---
-        
-        # 0. Global activity tracker – runs before anything else
-        application.add_handler(
-            MessageHandler(filters.ALL & ~filters.UpdateType.EDITED, global_activity_tracker),
-            group=-1,
-        )
         
         # 1. הוספת ConversationHandlers - הם מקבלים עדיפות ראשונה
         application.add_handler(create_support_conversation())
@@ -1991,7 +1973,7 @@ def main():
         application.add_error_handler(error_handler)
         
         # --- מעקב פעילות משתמשים ---
-        # הטיפול הגלובלי מתווסף בקבוצה -1 ומשגיח על כל סוגי העדכונים
+        # track_activity נקרא בתחילת handle_general_message, ולכן אין צורך במטפל נפרד
 
         # הוספת מטפל לפקודה recent_users
         application.add_handler(CommandHandler("recent_users", recent_users))
