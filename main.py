@@ -1889,8 +1889,15 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"Searching for users active since: {threshold}")
 
     recent_cursor = (
-        users_collection.find({"last_seen": {"$gte": threshold}})
-        .sort("last_seen", -1)
+        users_collection.find(
+            {
+                "$or": [
+                    {"last_seen": {"$gte": threshold}},
+                    {"last_activity": {"$gte": threshold}},
+                ]
+            }
+        )
+        .sort([("last_seen", -1), ("last_activity", -1)])
         .limit(50)
     )
 
@@ -1904,7 +1911,11 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     lines: list[str] = []
     for idx, usr in enumerate(recent_list, 1):
-        delta_str = human_timedelta_hebrew(usr.get("last_seen", now), now)
+        # Pick the most recent timestamp between last_seen and last_activity
+        last_seen = usr.get("last_seen")
+        last_activity = usr.get("last_activity")
+        last_time = max(filter(None, [last_seen, last_activity])) if (last_seen or last_activity) else None
+        delta_str = human_timedelta_hebrew(last_time, now) if last_time else "לא ידוע"
         name = usr.get("first_name", "")
         username = f"@{usr.get('username')}" if usr.get("username") else ""
         lines.append(f"{idx}. {name} {username} – {delta_str}")
