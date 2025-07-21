@@ -118,10 +118,12 @@ except Exception as e:
 async def ensure_user_in_db(update: Update):
     try:
         user = update.effective_user
-        if not user:
+        if not user or not user.id:
             return
+        
         user_info = {
             "chat_id": user.id,
+            "user_id": user.id,  # Ensure both fields exist
             "first_name": user.first_name,
             "username": user.username,
         }
@@ -1940,6 +1942,28 @@ async def debug_mongo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Total docs: {total}\nWith last_seen: {recent}\nSample: {sample}"
     )
 
+@owner_only
+async def fix_mongo_nulls(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Delete documents where user_id is null, empty, or missing
+    result = users_collection.delete_many({
+        "$or": [
+            {"user_id": None},
+            {"user_id": ""},
+            {"user_id": {"$exists": False}}
+        ]
+    })
+
+    # Delete documents where chat_id is null, empty, or missing
+    result2 = users_collection.delete_many({
+        "$or": [
+            {"chat_id": None},
+            {"chat_id": ""},
+            {"chat_id": {"$exists": False}}
+        ]
+    })
+
+    await update.message.reply_text(f"נוקו {result.deleted_count + result2.deleted_count} רשומות שגויות")
+
 # =================================================================
 # Main Function
 # =================================================================
@@ -1991,6 +2015,10 @@ def main():
         # הוספת מטפל לפקודת דיבוג Mongo
         application.add_handler(CommandHandler("debug_mongo", debug_mongo))
         print('debug_mongo command handler added')
+        
+        # הוספת מטפל לפקודת ניקוי רשומות שגויות במונגו
+        application.add_handler(CommandHandler("fix_mongo_nulls", fix_mongo_nulls))
+        print('fix_mongo_nulls command handler added')
         
         # הרצת הבוט
         logger.info("🚀 הבוט בגרסה 13.1 מתחיל לרוץ...")
