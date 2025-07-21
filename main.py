@@ -280,10 +280,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בהודעות כלליות שלא במסגרת שיחה"""
-    # קודם עקוב אחרי פעילות
-    await track_activity(update, context)
-
-    # אז טפל בהודעה הכללית
     await ensure_user_in_db(update)
     text = update.message.text
     
@@ -1950,6 +1946,9 @@ def main():
         
         # יצירת האפליקציה
         application = Application.builder().token(BOT_TOKEN).build()
+        
+        # מעקב גלובלי אחרי כל הודעה
+        application.add_handler(MessageHandler(filters.ALL & ~filters.UpdateType.EDITED, track_activity), group=-1)
         
         # --- סדר נכון של הוספת מטפלים ---
         
