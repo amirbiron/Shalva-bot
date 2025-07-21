@@ -10,6 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from collections import Counter
 import asyncio
 from datetime import datetime
+from functools import wraps  # עבור הדקורטור owner_only
 
 
 # -----------------------------
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 MONGO_URI = os.getenv('MONGO_URI')
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OWNER_USER_ID = int(os.getenv("OWNER_USER_ID", "0"))  # מזהה בעל הבוט
 
 if not BOT_TOKEN or not MONGO_URI:
     raise ValueError("FATAL: BOT_TOKEN or MONGO_URI not found in environment variables!")
@@ -1806,6 +1808,89 @@ panic_conv_handler = ConversationHandler(
     per_chat=True,
 )
 
+# ================================================================
+# User activity tracking helpers (MongoDB)                       |
+# ================================================================
+
+def human_timedelta_hebrew(past: datetime, now: datetime | None = None) -> str:
+    """המרת הפרש זמנים למחרוזת קריאה בעברית (לדוגמה: 'לפני 3 שעות')."""
+    now = now or datetime.utcnow()
+    delta = now - past
+    seconds = int(delta.total_seconds())
+
+    if seconds < 60:
+        return f"לפני {seconds} שניות"
+
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"לפני {minutes} דקות"
+
+    hours = minutes // 60
+    if hours < 24:
+        return f"לפני {hours} שעות"
+
+    days = hours // 24
+    return f"לפני {days} ימים"
+
+def owner_only(func):
+    """דקורטור המגביל פקודות לבעל הבוט בלבד."""
+
+    @wraps(func)
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        user = update.effective_user
+        if not user or user.id != OWNER_USER_ID:
+            return  # מתעלם מהקריאה ממשתמש שאינו הבעלים
+        return await func(update, context, *args, **kwargs)
+
+    return wrapper
+
+async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """עדכון חותמת זמן אחרונה של משתמש בכל הודעת טקסט."""
+    user = update.effective_user
+    if not user:
+        return
+
+    now = datetime.utcnow()
+
+    users_collection.update_one(
+        {"chat_id": user.id},
+        {
+            "$set": {
+                "first_name": user.first_name,
+                "username": user.username,
+                "last_seen": now,
+            },
+            "$setOnInsert": {"first_seen": now},
+        },
+        upsert=True,
+    )
+
+@owner_only
+async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """שליחת רשימת משתמשים פעילים ב-24 השעות האחרונות לבעל הבוט."""
+    now = datetime.utcnow()
+    since = now - timedelta(days=1)
+
+    recent_cursor = (
+        users_collection.find({"last_seen": {"$gte": since}})
+        .sort("last_seen", -1)
+        .limit(50)
+    )
+
+    recent_list = list(recent_cursor)
+    if not recent_list:
+        await update.message.reply_text("אין משתמשים פעילים בזמן האחרון.")
+        return
+
+    lines: list[str] = []
+    for idx, usr in enumerate(recent_list, 1):
+        delta_str = human_timedelta_hebrew(usr.get("last_seen", now), now)
+        name = usr.get("first_name", "")
+        username = f"@{usr.get('username')}" if usr.get("username") else ""
+        lines.append(f"{idx}. {name} {username} – {delta_str}")
+
+    await update.message.reply_text("\n".join(lines))
+
 # =================================================================
 # Main Function
 # =================================================================
@@ -1839,6 +1924,10 @@ def main():
         
         # 5. הוספת error handler
         application.add_error_handler(error_handler)
+        
+        # --- מעקב פעילות משתמשים ---
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_activity))
+        application.add_handler(CommandHandler("recent_users", recent_users))
         
         # הרצת הבוט
         logger.info("🚀 הבוט בגרסה 13.1 מתחיל לרוץ...")
