@@ -1847,6 +1847,11 @@ def owner_only(func):
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """עדכון חותמת זמן אחרונה של משתמש בכל הודעת טקסט."""
     user = update.effective_user
+    # הדפסה לצורך דיבוג תחילת מעקב פעילות
+    if user:
+        print(f"Tracking activity for user {user.id}: {user.username}")
+    else:
+        print("Tracking activity: user not found")
     if not user:
         return
 
@@ -1864,20 +1869,27 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
         },
         upsert=True,
     )
+    # הדפסה לאחר שמירה במונגו
+    print("Activity saved to MongoDB")
 
 @owner_only
 async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """שליחת רשימת משתמשים פעילים ב-24 השעות האחרונות לבעל הבוט."""
     now = datetime.utcnow()
-    since = now - timedelta(days=1)
+    threshold = now - timedelta(days=1)
+    # הדפסה לצורך דיבוג
+    print(f"Searching for users active since: {threshold}")
 
     recent_cursor = (
-        users_collection.find({"last_seen": {"$gte": since}})
+        users_collection.find({"last_seen": {"$gte": threshold}})
         .sort("last_seen", -1)
         .limit(50)
     )
 
     recent_list = list(recent_cursor)
+    print(f"Found {len(recent_list)} users")
+    if recent_list:
+        print(f"Sample user: {recent_list[0]}")
     if not recent_list:
         await update.message.reply_text("אין משתמשים פעילים בזמן האחרון.")
         return
@@ -1890,6 +1902,18 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"{idx}. {name} {username} – {delta_str}")
 
     await update.message.reply_text("\n".join(lines))
+
+# -----------------------------------------------------------------
+# Debug Mongo Command
+# -----------------------------------------------------------------
+@owner_only
+async def debug_mongo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    total = users_collection.count_documents({})
+    recent = users_collection.count_documents({"last_activity": {"$exists": True}})
+    sample = users_collection.find_one()
+    await update.message.reply_text(
+        f"Total docs: {total}\nWith activity: {recent}\nSample: {sample}"
+    )
 
 # =================================================================
 # Main Function
@@ -1928,6 +1952,8 @@ def main():
         # --- מעקב פעילות משתמשים ---
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_activity))
         application.add_handler(CommandHandler("recent_users", recent_users))
+        # הוספת מטפל לפקודת דיבוג Mongo
+        application.add_handler(CommandHandler("debug_mongo", debug_mongo))
         
         # הרצת הבוט
         logger.info("🚀 הבוט בגרסה 13.1 מתחיל לרוץ...")
