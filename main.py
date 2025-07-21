@@ -1857,27 +1857,28 @@ def owner_only(func):
     return wrapper
 
 async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """עדכון חותמת זמן אחרונה של משתמש בכל הודעת טקסט."""
+    """עדכון פעילות משתמש: חותמת זמן, ספירת הודעות וביקורים שבועיים."""
     user = update.effective_user
-    # הדפסה לצורך דיבוג תחילת מעקב פעילות
-    if user:
-        print(f"Tracking activity for user {user.id}: {user.username}")
-    else:
-        print("Tracking activity: user not found")
     if not user:
         return
 
     now = datetime.utcnow()
+    # תחילת השבוע (יום שני) בפורמט ISO, לדוגמה: '2024-07-15'
+    week_start = (now - timedelta(days=now.weekday())).date().isoformat()
 
     users_collection.update_one(
         {"chat_id": user.id},
         {
             "$set": {
+                "user_id": user.id,
                 "first_name": user.first_name,
                 "username": user.username,
                 "last_seen": now,
             },
-            "$setOnInsert": {"first_seen": now},
+            "$setOnInsert": {"first_seen": now, "total_messages": 0},
+            "$inc": {"total_messages": 1},
+            # שומר את תאריכי הביקור הייחודיים בכל שבוע
+            "$addToSet": {f"weekly_visits.{week_start}": now.date().isoformat()},
         },
         upsert=True,
     )
@@ -1886,11 +1887,10 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @owner_only
 async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """שליחת רשימת משתמשים פעילים ב-24 השעות האחרונות לבעל הבוט."""
+    """שליחת רשימת משתמשים פעילים בשבעת הימים האחרונים לבעל הבוט, כולל מספר ימי הביקור השבוע."""
     now = datetime.utcnow()
-    threshold = now - timedelta(days=1)
-    # הדפסה לצורך דיבוג
-    print(f"Searching for users active since: {threshold}")
+    threshold = now - timedelta(days=7)
+    week_start = (now - timedelta(days=now.weekday())).date().isoformat()
 
     recent_cursor = (
         users_collection.find(
@@ -1906,23 +1906,26 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     recent_list = list(recent_cursor)
-    print(f"Found {len(recent_list)} users")
-    if recent_list:
-        print(f"Sample user: {recent_list[0]}")
+
     if not recent_list:
-        await update.message.reply_text("אין משתמשים פעילים בזמן האחרון.")
+        await update.message.reply_text("אין משתמשים פעילים בשבוע האחרון.")
         return
 
-    lines: list[str] = []
+    lines = []
     for idx, usr in enumerate(recent_list, 1):
-        # Pick the most recent timestamp between last_seen and last_activity
         last_seen = usr.get("last_seen")
         last_activity = usr.get("last_activity")
-        last_time = max(filter(None, [last_seen, last_activity])) if (last_seen or last_activity) else None
-        delta_str = human_timedelta_hebrew(last_time, now) if last_time else "לא ידוע"
+        last_time = max(filter(None, [last_seen, last_activity])) if (last_seen or last_activity) else now
+
+        delta_str = human_timedelta_hebrew(last_time, now)
         name = usr.get("first_name", "")
         username = f"@{usr.get('username')}" if usr.get("username") else ""
-        lines.append(f"{idx}. {name} {username} – {delta_str}")
+
+        weekly_visits = usr.get("weekly_visits", {}).get(week_start, [])
+        days_count = len(weekly_visits) if weekly_visits else 0
+        days_text = f"({days_count} ימים השבוע)" if days_count > 0 else ""
+
+        lines.append(f"{idx}. {name} {username} – {delta_str} {days_text}")
 
     await update.message.reply_text("\n".join(lines))
 
