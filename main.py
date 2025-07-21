@@ -224,6 +224,8 @@ async def handle_menu_during_conversation(update: Update, context: ContextTypes.
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """פונקציית התחלה משופרת שגם מנקה שיחות תקועות."""
+    # מעקב פעילות גלובלי
+    await track_activity(update, context)
     await ensure_user_in_db(update)
     user_id = update.effective_user.id
     
@@ -819,6 +821,8 @@ def create_support_conversation():
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בלחיצות על כפתורים כלליים"""
+    # מעקב פעילות גלובלי עבור CallbackQuery
+    await track_activity(update, context)
     await ensure_user_in_db(update)
     query = update.callback_query
     await query.answer()
@@ -1934,6 +1938,11 @@ async def debug_mongo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Total docs: {total}\nWith last_seen: {recent}\nSample: {sample}"
     )
 
+# === Global activity handler ===
+async def global_activity_tracker(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """מעקב גלובלי אחרי כל פעילות."""
+    await track_activity(update, context)
+
 # =================================================================
 # Main Function
 # =================================================================
@@ -1952,6 +1961,12 @@ def main():
         application = Application.builder().token(BOT_TOKEN).build()
         
         # --- סדר נכון של הוספת מטפלים ---
+        
+        # 0. Global activity tracker – runs before anything else
+        application.add_handler(
+            MessageHandler(filters.ALL & ~filters.UpdateType.EDITED, global_activity_tracker),
+            group=-1,
+        )
         
         # 1. הוספת ConversationHandlers - הם מקבלים עדיפות ראשונה
         application.add_handler(create_support_conversation())
@@ -1973,7 +1988,7 @@ def main():
         application.add_error_handler(error_handler)
         
         # --- מעקב פעילות משתמשים ---
-        # track_activity נקרא בתחילת handle_general_message, ולכן אין צורך במטפל נפרד
+        # הטיפול הגלובלי מתווסף בקבוצה -1 ומשגיח על כל סוגי העדכונים
 
         # הוספת מטפל לפקודה recent_users
         application.add_handler(CommandHandler("recent_users", recent_users))
