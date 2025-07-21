@@ -1909,10 +1909,10 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @owner_only
 async def debug_mongo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total = users_collection.count_documents({})
-    recent = users_collection.count_documents({"last_activity": {"$exists": True}})
+    recent = users_collection.count_documents({"last_seen": {"$exists": True}})
     sample = users_collection.find_one()
     await update.message.reply_text(
-        f"Total docs: {total}\nWith activity: {recent}\nSample: {sample}"
+        f"Total docs: {total}\nWith last_seen: {recent}\nSample: {sample}"
     )
 
 # =================================================================
@@ -1950,7 +1950,7 @@ def main():
         application.add_error_handler(error_handler)
         
         # --- מעקב פעילות משתמשים ---
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_activity))
+        # (duplicate track_activity handler removed)
         application.add_handler(CommandHandler("recent_users", recent_users))
         # הוספת מטפל לפקודת דיבוג Mongo
         application.add_handler(CommandHandler("debug_mongo", debug_mongo))
