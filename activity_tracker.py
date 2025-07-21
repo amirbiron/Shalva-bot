@@ -28,15 +28,24 @@ TELEGRAM_BOT_TOKEN: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_BOT_TOKEN:
     raise RuntimeError("⚠️  אנא הגדר את המשתנה הסביבתי TELEGRAM_BOT_TOKEN עם הטוקן של הבוט שלך.")
 
-# MongoDB connection string (replace with secure retrieval in production)
-MONGO_URI: str = "mongodb+srv://username:password@cluster.mongodb.net/"
+# MongoDB connection string must be provided via environment variable for security reasons
+# (e.g. mongodb+srv://<user>:<pass>@cluster.mongodb.net/)
+MONGO_URI: str | None = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    raise RuntimeError("⚠️  אנא הגדר Environment Variable בשם 'MONGO_URI' עם מחרוזת החיבור ל-MongoDB.")
 
 # Database/Collection names
 DB_NAME: str = "ShalvaBotDB"
 COLLECTION_NAME: str = "users"
 
 # Only the owner will be able to use admin commands
-OWNER_USER_ID: int = 123456789  # ← החלף במספר הטלגרם שלך
+try:
+    OWNER_USER_ID: int = int(os.getenv("OWNER_USER_ID", "0"))
+except ValueError:
+    OWNER_USER_ID = 0
+
+if OWNER_USER_ID == 0:
+    raise RuntimeError("⚠️  אנא הגדר Environment Variable בשם 'OWNER_USER_ID' עם ה-chat-id המספרי שלך בטלגרם.")
 
 # -----------------------------------------------------------------------------
 # MongoDB Setup
