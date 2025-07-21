@@ -32,21 +32,8 @@ def human_timedelta_hebrew(past: datetime, now: Optional[datetime] = None) -> st
     return f"לפני {days} ימים" if days != 1 else "לפני יום"
 
 
-class MongoActivityTracker(commands.Cog):
+class ActivityTracker(commands.Cog):
     """Discord Cog that tracks user activity and stores it in MongoDB."""
-
-    # ------------------------------------------------------------------
-    # Owner-only configuration & checks
-    # ------------------------------------------------------------------
-    YOUR_USER_ID = 123456789  # החלף במספר המשתמש שלך
-
-    def is_owner():
-        """Return a commands.check that allows only the bot owner to run the command."""
-
-        def predicate(ctx):
-            return ctx.author.id == MongoActivityTracker.YOUR_USER_ID
-
-        return commands.check(predicate)
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -86,7 +73,6 @@ class MongoActivityTracker(commands.Cog):
         aliases=["recent", "משתמשים_אחרונים", "פעילים"],
         help="מציג משתמשים פעילים ב־X הימים האחרונים (ברירת מחדל 7)."
     )
-    @is_owner()
     async def recent_users(self, ctx: commands.Context, days: int = 7):
         """Show users active within the last X days."""
         threshold = datetime.utcnow() - timedelta(days=days)
@@ -123,7 +109,6 @@ class MongoActivityTracker(commands.Cog):
         aliases=["info", "מידע_משתמש"],
         help="מציג מידע על משתמש ספציפי."
     )
-    @is_owner()
     async def user_info(self, ctx: commands.Context, member: Optional[discord.Member] = None):
         """Display stored activity details for a specific user."""
         member = member or ctx.author
@@ -156,4 +141,4 @@ class MongoActivityTracker(commands.Cog):
 
 async def setup(bot: commands.Bot):
     """Called by discord.py to add the cog."""
-    await bot.add_cog(MongoActivityTracker(bot))
+    await bot.add_cog(ActivityTracker(bot))
