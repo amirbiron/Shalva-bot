@@ -130,10 +130,25 @@ collection = users_collection  # alias for readability
 
 # Ensure indexes required by the activity-tracking features (safe to run repeatedly)
 try:
+    # Delete documents with missing or invalid user_id BEFORE creating the unique index
+    cleanup_result = collection.delete_many(
+        {
+            "$or": [
+                {"user_id": None},
+                {"user_id": ""},
+                {"user_id": {"$exists": False}},
+            ]
+        }
+    )
+
+    if cleanup_result.deleted_count:
+        logger.info(f"Cleaned {cleanup_result.deleted_count} invalid user records")
+
     collection.create_index([("user_id", ASCENDING)], unique=True)
     collection.create_index([("last_activity", DESCENDING)])
+    logger.info("Activity tracking indexes created successfully")
 except Exception as idx_e:
-    logger.warning(f"Could not create activity-tracking indexes: {idx_e}")
+    logger.warning(f"Index setup warning: {idx_e}")
 
 
 # -----------------------------------------------------------------
