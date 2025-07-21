@@ -1838,8 +1838,12 @@ def owner_only(func):
     @wraps(func)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         user = update.effective_user
+        # Debug prints for owner check
+        print(f'owner_only check: user_id={user.id if user else None}, owner_id={OWNER_USER_ID}')
         if not user or user.id != OWNER_USER_ID:
+            print(f'Access denied for user {user.id if user else None}')
             return  # מתעלם מהקריאה ממשתמש שאינו הבעלים
+        print(f'Access granted for user {user.id}')
         return await func(update, context, *args, **kwargs)
 
     return wrapper
@@ -1922,6 +1926,10 @@ async def debug_mongo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """פונקציה ראשית עם סדר הוספת מטפלים נכון."""
     try:
+        # Debug prints at startup
+        print(f'Bot starting with OWNER_USER_ID: {OWNER_USER_ID}')
+        print(f'BOT_TOKEN exists: {bool(BOT_TOKEN)}')
+        print(f'MONGO_URI exists: {bool(MONGO_URI)}')
         # יצירת בסיס נתונים
         init_database()
         
@@ -1950,10 +1958,17 @@ def main():
         application.add_error_handler(error_handler)
         
         # --- מעקב פעילות משתמשים ---
-        # (duplicate track_activity handler removed)
+        # הוספת מטפל למעקב פעילות משתמשים
+        application.add_handler(MessageHandler(filters.ALL, track_activity))
+        print('track_activity handler added')
+
+        # הוספת מטפל לפקודה recent_users
         application.add_handler(CommandHandler("recent_users", recent_users))
+        print('recent_users command handler added')
+
         # הוספת מטפל לפקודת דיבוג Mongo
         application.add_handler(CommandHandler("debug_mongo", debug_mongo))
+        print('debug_mongo command handler added')
         
         # הרצת הבוט
         logger.info("🚀 הבוט בגרסה 13.1 מתחיל לרוץ...")
