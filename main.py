@@ -280,6 +280,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בהודעות כלליות שלא במסגרת שיחה"""
+    # קודם עקוב אחרי פעילות
+    await track_activity(update, context)
+
+    # אז טפל בהודעה הכללית
     await ensure_user_in_db(update)
     text = update.message.text
     
@@ -1958,9 +1962,7 @@ def main():
         application.add_error_handler(error_handler)
         
         # --- מעקב פעילות משתמשים ---
-        # הוספת מטפל למעקב פעילות משתמשים
-        application.add_handler(MessageHandler(filters.ALL, track_activity))
-        print('track_activity handler added')
+        # track_activity נקרא בתחילת handle_general_message, ולכן אין צורך במטפל נפרד
 
         # הוספת מטפל לפקודה recent_users
         application.add_handler(CommandHandler("recent_users", recent_users))
