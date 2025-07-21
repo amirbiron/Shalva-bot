@@ -1890,9 +1890,10 @@ async def track_activity(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @owner_only
 async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """שליחת רשימת משתמשים פעילים ב-24 השעות האחרונות לבעל הבוט."""
+    """שליחת רשימת משתמשים פעילים בשבוע האחרון לבעל הבוט."""
     now = datetime.utcnow()
-    threshold = now - timedelta(days=1)
+    # שבוע במקום יום
+    threshold = now - timedelta(days=7)
     # הדפסה לצורך דיבוג
     print(f"Searching for users active since: {threshold}")
 
@@ -1914,7 +1915,7 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if recent_list:
         print(f"Sample user: {recent_list[0]}")
     if not recent_list:
-        await update.message.reply_text("אין משתמשים פעילים בזמן האחרון.")
+        await update.message.reply_text("אין משתמשים פעילים בשבוע האחרון.")
         return
 
     lines: list[str] = []
@@ -1928,7 +1929,9 @@ async def recent_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         username = f"@{usr.get('username')}" if usr.get("username") else ""
         lines.append(f"{idx}. {name} {username} – {delta_str}")
 
-    await update.message.reply_text("\n".join(lines))
+    await update.message.reply_text(
+        f"משתמשים פעילים בשבוע האחרון ({len(recent_list)}):\n\n" + "\n".join(lines)
+    )
 
 # -----------------------------------------------------------------
 # Debug Mongo Command
