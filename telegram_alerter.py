@@ -5,7 +5,7 @@ async def send_telegram_alert(message: str) -> None:
     """Send a text alert via Telegram bot to the admin chat."""
     try:
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-        chat_id = os.getenv("TELEGRAM_ADMIN_CHAT_ID")
+        chat_id = os.getenv("OWNER_USER_ID")
 
         if not bot_token or not chat_id:
             print("ERROR: Telegram token or chat_id not found in environment variables.")
