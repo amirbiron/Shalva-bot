@@ -15,6 +15,7 @@ from google.api_core import exceptions
 from dotenv import load_dotenv
 from usage_tracker import increment_and_check_usage, ALERT_THRESHOLD
 from telegram_alerter import send_telegram_alert
+from telegram.error import Conflict
 
 
 # -----------------------------
@@ -1535,19 +1536,17 @@ async def set_report_type(query, context):
 # =================================================================
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """לוג שגיאות משופר"""
-    logger.error(msg="Exception while handling an update:", exc_info=context.error)
-    
-    # נסיון לשלוח הודעת שגיאה למשתמש אם אפשר
-    if update and hasattr(update, 'effective_chat'):
-        try:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text="❌ אופס! קרתה שגיאה קטנה. נסה שוב או חזור לתפריט הראשי.",
-                reply_markup=get_main_keyboard()
-            )
-        except:
-            pass  # אם גם זה נכשל, לא נעשה כלום
+    """מטפל בשגיאות באופן מותאם אישית ורושם אותן ללוג."""
+    # אם השגיאה היא Conflict, רושמים אזהרה בלבד ולא מתייחסים אליה כשגיאה קריטית.
+    if isinstance(context.error, Conflict):
+        logger.warning(
+            f"Update {getattr(update, 'update_id', 'N/A')} caused error: {context.error} - Likely another bot instance is running."
+        )
+        return
+
+    # כל שגיאה אחרת נרשמת כשגיאה חמורה עם כל הפרטים.
+    logger.error("Exception while handling an update:", exc_info=context.error)
+    return
 
 # =================================================================
 # --- Panic Feature Functions (גרסה 9 - שינוי טקסט כפתור) ---
@@ -1987,7 +1986,7 @@ def main():
         
         # יצירת האפליקציה
         application = Application.builder().token(BOT_TOKEN).build()
-        
+        application.add_error_handler(error_handler)
         # מעקב גלובלי אחרי כל הודעה
         application.add_handler(MessageHandler(filters.ALL & ~filters.UpdateType.EDITED, track_activity), group=-1)
         
@@ -2010,7 +2009,7 @@ def main():
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_general_message))
         
         # 5. הוספת error handler
-        application.add_error_handler(error_handler)
+        # application.add_error_handler(error_handler)
         
         # --- מעקב פעילות משתמשים ---
         # track_activity נקרא בתחילת handle_general_message, ולכן אין צורך במטפל נפרד
