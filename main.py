@@ -1144,9 +1144,6 @@ async def show_relaxing_music_message(update: Update, context: ContextTypes.DEFA
 🎧 [יוטיוב](https://youtu.be/UfcAVejslrU) | 🎶 [ספוטיפיי](https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6)
 ⭐ מחקר של המכון הבריטי לטכנולוגיית קול קבע שזה השיר הכי מרגיע!
 
-🎼 **"Someone Like You" - Adele**
-🎧 [יוטיוב](https://youtu.be/hLQl3WQQoQ0) | 🎶 [ספוטיפיי](https://open.spotify.com/track/1zwMYTA5nlNjZxYrvBB2pV)
-
 🎼 **"Watermark" - Enya**
 🎧 [יוטיוב](https://youtu.be/0IKvdaXZP8Q) | 🎶 [ספוטיפיי](https://open.spotify.com/track/2m8MwTvNHBYIqieOoQeyuY)
 
@@ -1176,14 +1173,11 @@ async def show_relaxing_music_message(update: Update, context: ContextTypes.DEFA
 async def show_relaxing_music(query, context):
     """הצגת רשימת שירים מרגיעים מכפתור"""
     music_text = """
-🎵 שירים מרגיעים (מוכחים מחקרית לירידה בסטרס):
+🎵 שירים מרgiעים (מוכחים מחקרית לירידה בסטרס):
 
 🎼 **"Weightless" - Marconi Union**
 🎧 [יוטיוב](https://www.youtube.com/watch?v=UfcAVejslrU) | 🎶 [ספוטיפיי](https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6)
 ⭐ מחקר של המכון הבריטי לטכנולוגיית קול קבע שזה השיר הכי מרגיע!
-
-🎼 **"Someone Like You" - Adele**  
-🎧 [יוטיוב](https://www.youtube.com/watch?v=hLQl3WQQoQ0) | 🎶 [ספוטיפיי](https://open.spotify.com/track/1zwMYTA5nlNjZxYrvBB2pV)
 
 🎼 **"Watermark" - Enya**
 🎧 [יוטיוב](https://www.youtube.com/watch?v=bPCdsa7hS7M) | 🎶 [ספוטיפיי](https://open.spotify.com/track/2m8MwTvNHBYIqieOoQeyuY)
