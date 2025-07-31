@@ -267,6 +267,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔒 הכל נשאר רק אצלך ופרטי לחלוטין.
 
+📞 לכל תקלה או ביקורת ניתן לפנות ל-@moominAmir בטלגרם
+
 💡 **טיפ חשוב:** אם אי פעם הבוט מפסיק להגיב, לחץ על כפתור "🏠 התחלה / איפוס" בתחתית המסך. זה יפתור את הבעיה ברוב המקרים!
 
 קח את הזמן שלך, ובחר מה מתאים לך עכשיו:
