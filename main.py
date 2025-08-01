@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from usage_tracker import increment_and_check_usage, ALERT_THRESHOLD
 from telegram_alerter import send_telegram_alert
 from telegram.error import Conflict
+from activity_reporter import create_reporter
 
 
 # -----------------------------
@@ -35,6 +36,13 @@ if not BOT_TOKEN or not MONGO_URI:
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
+
+# Activity Reporter initialization
+reporter = create_reporter(
+    mongodb_uri="mongodb+srv://mumin:M43M2TFgLfGvhBwY@muminai.tm6x81b.mongodb.net/?retryWrites=true&w=majority&appName=muminAI",
+    service_id="srv-d1lk1mfdiees73fos2h0",
+    service_name="ShalvaBot"
+)
 
 # הגדרת מצבי שיחה
 # דיווח מהיר
@@ -825,6 +833,11 @@ def create_support_conversation():
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """טיפול בלחיצות על כפתורים כלליים"""
+    if update.effective_user:
+        try:
+            reporter.report_activity(update.effective_user.id)
+        except Exception as e:
+            logger.error(f"Activity reporter error: {e}")
     await ensure_user_in_db(update)
     query = update.callback_query
     await query.answer()
