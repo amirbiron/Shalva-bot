@@ -260,9 +260,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.close()
     
     welcome_message = """
-🤗 שלום ויפה שהגעת! 
+🤗 שלום ויפה שהגעת!
 
-אני כאן כדי לעזור לך להבין ולעקוב אחר הרגשות שלך בצורה בטוחה ופרטית. 
+אני כאן כדי לעזור לך להבין ולעקוב אחר הרגשות שלך בצורה בטוחה ופרטית.
 
 זה לא תמיד קל להתמודד עם חרדה ודיכאון, ואני רוצה להיות הכלי שיעזור לך לראות דפוסים ולמצוא דרכים טובות יותר להרגיש.
 
@@ -276,11 +276,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔒 הכל נשאר רק אצלך ופרטי לחלוטין.
 
-💚 עוד בוט מומלץ לעזרה עם רגשות קשים: https://t.me/taaselitovbot
-
 📞 לכל תקלה או ביקורת ניתן לפנות ל-@moominAmir בטלגרם
 
-💡 **טיפ חשוב:** אם אי פעם הבוט מפסיק להגיב, לחץ על כפתור "🏠 התחלה / איפוס" בתחתית המסך. זה יפתור את הבעיה ברוב המקרים!
+💡 טיפ חשוב: אם אי פעם הבוט מפסיק להגיב, לחץ על כפתור "🏠 התחלה / איפוס" בתחתית המסך. זה יפתור את הבעיה ברוב המקרים!
+
+💚 עוד בוט מומלץ לעזרה עם רגשות קשים: https://t.me/taaselitovbot
 
 קח את הזמן שלך, ובחר מה מתאים לך עכשיו:
 """
