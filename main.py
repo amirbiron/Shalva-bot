@@ -276,6 +276,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 🔒 הכל נשאר רק אצלך ופרטי לחלוטין.
 
+💚 עוד בוט מומלץ לעזרה עם רגשות קשים: https://t.me/taaselitovbot
+
 📞 לכל תקלה או ביקורת ניתן לפנות ל-@moominAmir בטלגרם
 
 💡 **טיפ חשוב:** אם אי פעם הבוט מפסיק להגיב, לחץ על כפתור "🏠 התחלה / איפוס" בתחתית המסך. זה יפתור את הבעיה ברוב המקרים!
@@ -1567,7 +1569,8 @@ async def suggest_ai_chat_and_end(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     final_text = (
         "נגמרו לי ההצעות במאגר, תמיד תוכל ללחוץ על לחצן המצוקה כדי להתחיל סבב נוסף.\n"
-        "ממליץ לך בחום לעבור ללחצן \"זקוק/ה לאוזן קשבת?\", תוכל לנהל שיחה עם סוכן בינה מלאכותית אדיב, מכיל ואמפתי 🩵"
+        "ממליץ לך בחום לעבור ללחצן \"זקוק/ה לאוזן קשבת?\", תוכל לנהל שיחה עם סוכן בינה מלאכותית אדיב, מכיל ואמפתי 🩵\n\n"
+        "💚 עוד המלצה: בוט מעולה לעזרה עם רגשות קשים: https://t.me/taaselitovbot"
     )
     try:
         await query.edit_message_text(text=final_text)
