@@ -1,0 +1,27 @@
+version: 2
+updates:
+  # npm (Node.js)
+  - package-ecosystem: "npm"
+    directory: "/"           # איפה ה-package.json נמצא
+    schedule:
+      interval: "monthly"    # בדיקה פעם בחודש
+      time: "09:00"
+      timezone: "Asia/Jerusalem"
+    open-pull-requests-limit: 10
+    labels: ["deps", "npm"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
+  # pip (Python)
+  - package-ecosystem: "pip"
+    directory: "/"           # איפה ה-requirements.txt נמצא
+    schedule:
+      interval: "monthly"
+      time: "09:15"
+      timezone: "Asia/Jerusalem"
+    open-pull-requests-limit: 10
+    labels: ["deps", "python"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
