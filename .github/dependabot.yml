@@ -1,17 +1,5 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "monthly"
-      time: "09:00"
-      timezone: "Asia/Jerusalem"
-    open-pull-requests-limit: 10
-    labels: ["deps", "npm"]
-    ignore:
-      - dependency-name: "*"
-        update-types: ["version-update:semver-major"]
-
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
@@ -23,4 +11,3 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-        # trigger update
