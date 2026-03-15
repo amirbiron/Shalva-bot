@@ -264,7 +264,8 @@ def get_topic_shortcuts_keyboard():
 # =================================================================
 
 async def _send_to_ai(context, user_message):
-    """שליחת הודעה ל-AI וקבלת תשובה, עם מעקב שימוש והתראות"""
+    """שליחת הודעה ל-AI וקבלת תשובה, עם מעקב שימוש והתראות.
+    לא מעדכן היסטוריה - הקורא אחראי לקרוא ל-_commit_to_history אחרי שליחה מוצלחת לטלגרם."""
     model = context.user_data.get('mh_navigator_model')
     if not model:
         return None
@@ -279,13 +280,15 @@ async def _send_to_ai(context, user_message):
     history = context.user_data.get('mh_chat_history', [])
     chat = model.start_chat(history=history)
     response = await chat.send_message_async(user_message)
-    bot_response = response.text
+    return response.text
 
+
+def _commit_to_history(context, user_message, bot_response):
+    """שמירת חילופי הודעות בהיסטוריה - לקרוא רק אחרי שליחה מוצלחת לטלגרם"""
+    history = context.user_data.get('mh_chat_history', [])
     history.append({'role': 'user', 'parts': [user_message]})
     history.append({'role': 'model', 'parts': [bot_response]})
     context.user_data['mh_chat_history'] = history
-
-    return bot_response
 
 
 def _init_ai_session(context):
@@ -341,6 +344,7 @@ async def handle_topic_shortcut(update: Update, context: ContextTypes.DEFAULT_TY
                 text=bot_response,
                 reply_markup=get_topic_shortcuts_keyboard()
             )
+            _commit_to_history(context, shortcut_question, bot_response)
         else:
             await query.edit_message_text(
                 "מצטער, קרתה שגיאה. נסה שוב.",
@@ -389,6 +393,7 @@ async def handle_navigator_message(update: Update, context: ContextTypes.DEFAULT
                 bot_response,
                 reply_markup=get_topic_shortcuts_keyboard()
             )
+            _commit_to_history(context, user_message, bot_response)
         else:
             await update.message.reply_text(
                 "מצטער, קרתה שגיאה. נסה שוב.",
