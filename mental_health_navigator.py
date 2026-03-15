@@ -259,6 +259,32 @@ def get_topic_shortcuts_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 
+TELEGRAM_MSG_LIMIT = 4096
+
+
+def _split_message(text, limit=TELEGRAM_MSG_LIMIT):
+    """פיצול הודעה ארוכה לחלקים שמתאימים למגבלת טלגרם, עם חיתוך בשורות ריקות"""
+    if len(text) <= limit:
+        return [text]
+
+    chunks = []
+    while text:
+        if len(text) <= limit:
+            chunks.append(text)
+            break
+        # חיפוש שורה ריקה (גבול פסקה) קרוב ככל האפשר ל-limit
+        split_at = text.rfind('\n\n', 0, limit)
+        if split_at == -1:
+            # אם אין פסקה, חיתוך בשורה רגילה
+            split_at = text.rfind('\n', 0, limit)
+        if split_at == -1:
+            # מקרה קיצון - חיתוך במגבלה
+            split_at = limit
+        chunks.append(text[:split_at])
+        text = text[split_at:].lstrip('\n')
+    return chunks
+
+
 # =================================================================
 # פונקציות שיחה
 # =================================================================
@@ -340,10 +366,23 @@ async def handle_topic_shortcut(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         bot_response = await _send_to_ai(context, shortcut_question)
         if bot_response:
-            await query.edit_message_text(
-                text=bot_response,
-                reply_markup=get_topic_shortcuts_keyboard()
-            )
+            chunks = _split_message(bot_response)
+            # חלק ראשון מחליף את הודעת "מחפש מידע..."
+            await query.edit_message_text(text=chunks[0])
+            chat_id = query.message.chat_id
+            # חלקים נוספים נשלחים כהודעות חדשות
+            for chunk in chunks[1:-1]:
+                await context.bot.send_message(chat_id=chat_id, text=chunk)
+            # חלק אחרון (או יחיד אם אין פיצול) מקבל את הכפתורים
+            if len(chunks) > 1:
+                await context.bot.send_message(
+                    chat_id=chat_id, text=chunks[-1],
+                    reply_markup=get_topic_shortcuts_keyboard()
+                )
+            else:
+                await query.edit_message_text(
+                    text=chunks[0], reply_markup=get_topic_shortcuts_keyboard()
+                )
             _commit_to_history(context, shortcut_question, bot_response)
         else:
             await query.edit_message_text(
@@ -389,9 +428,12 @@ async def handle_navigator_message(update: Update, context: ContextTypes.DEFAULT
     try:
         bot_response = await _send_to_ai(context, user_message)
         if bot_response:
+            chunks = _split_message(bot_response)
+            for chunk in chunks[:-1]:
+                await update.message.reply_text(chunk)
+            # כפתורים רק בחלק האחרון
             await update.message.reply_text(
-                bot_response,
-                reply_markup=get_topic_shortcuts_keyboard()
+                chunks[-1], reply_markup=get_topic_shortcuts_keyboard()
             )
             _commit_to_history(context, user_message, bot_response)
         else:
