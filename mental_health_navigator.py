@@ -160,7 +160,7 @@ async def _send_to_ai(context, user_message):
 
 def _init_ai_session(context):
     """אתחול סשן AI חדש"""
-    context.user_data['mh_navigator_model'] = genai.GenerativeModel('gemini-1.5-flash')
+    context.user_data['mh_navigator_model'] = genai.GenerativeModel('gemini-2.5-flash')
     opening = (
         "🧠 נווט בריאות הנפש - ישראל\n\n"
         "היי! אני סוכן AI שמתמחה בבריאות הנפש בישראל.\n"
