@@ -11,7 +11,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Initialize model
-gemini_model = genai.GenerativeModel("gemini-pro")
+gemini_model = genai.GenerativeModel("gemini-2.5-flash")
 
 async def generate_content_with_monitoring(prompt: str):
     """Wrap Gemini API call with daily usage tracking and Telegram alerting."""

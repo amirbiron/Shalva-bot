@@ -17,6 +17,7 @@ from usage_tracker import increment_and_check_usage, ALERT_THRESHOLD
 from telegram_alerter import send_telegram_alert
 from telegram.error import Conflict
 from activity_reporter import create_reporter
+from mental_health_navigator import create_navigator_conversation
 
 
 # -----------------------------
@@ -159,6 +160,7 @@ MAIN_MENU_BUTTONS = [
     "🗣️ פריקה חופשית", "📈 גרפים והיסטוריה",
     "🎵 שירים מרגיעים", "💡 עזרה כללית",
     "💬 זקוק/ה לאוזן קשבת", "🔴 אני במצוקה", "⚙️ הגדרות",
+    "🧠 נווט בריאות הנפש",
     "🏠 התחלה / איפוס"
 ]
 MAIN_MENU_REGEX = "^(" + "|".join(MAIN_MENU_BUTTONS) + ")$"
@@ -170,7 +172,8 @@ def get_main_keyboard():
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
-        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("🔴 אני במצוקה"), KeyboardButton("⚙️ הגדרות")]
+        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("🔴 אני במצוקה"), KeyboardButton("⚙️ הגדרות")],
+        [KeyboardButton("🧠 נווט בריאות הנפש")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
@@ -248,6 +251,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('gemini_model', None)
         context.user_data.pop('chat_history', None)
         logger.info(f"Forcefully cleaned up a stuck AI conversation for user {user_id}.")
+    # ניקוי שיחת נווט בריאות הנפש תקועה
+    if 'mh_navigator_model' in context.user_data or 'mh_chat_history' in context.user_data:
+        context.user_data.pop('mh_navigator_model', None)
+        context.user_data.pop('mh_chat_history', None)
+        logger.info(f"Forcefully cleaned up a stuck navigator conversation for user {user_id}.")
     # ----------------------------------------------------
 
     # בדיקה אם המשתמש קיים במערכת (הקוד הקיים שלך)
@@ -273,6 +281,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🤖 שיחה עם AI אמפטי ומכיל להכלה והרגעה
 📈 מבט על הדרך - לראות איך אתה מתקדם
 💡 כלים לעזרה - טכניקות שיכולות להרגיע
+🧠 נווט בריאות הנפש - מידע על שירותים, זכויות ועלויות בישראל
 
 🔒 הכל נשאר רק אצלך ופרטי לחלוטין.
 
@@ -340,6 +349,15 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
         keyboard = [[InlineKeyboardButton("לחץ כאן להתחלת תרגול", callback_data='start_panic_flow')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text('כדי להתחיל, אנא לחץ על הכפתור:', reply_markup=reply_markup)
+    elif text == "🧠 נווט בריאות הנפש":
+        keyboard = [[InlineKeyboardButton("לחץ כאן לכניסה לנווט", callback_data='mh_start_navigator')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            '🧠 נווט בריאות הנפש - סוכן AI שמתמחה בבריאות הנפש בישראל\n\n'
+            'שאלו אותו על זכויות, טיפולים, עלויות, קופות חולים, קווי חירום ועוד.\n\n'
+            'לחץ על הכפתור להתחלה:',
+            reply_markup=reply_markup
+        )
     else:
         await update.message.reply_text(
             "בחר אפשרות מהתפריט למטה:",
@@ -661,7 +679,7 @@ async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("שירות השיחה אינו זמין כרגע.")
         return ConversationHandler.END
 
-    context.user_data['gemini_model'] = genai.GenerativeModel('gemini-1.5-flash')
+    context.user_data['gemini_model'] = genai.GenerativeModel('gemini-2.5-flash')
     opening_message = "אני כאן, איתך. מה יושב לך על הלב?\nכדי לסיים את השיחה ולחזור לתפריט, שלח /end_chat."
     context.user_data['chat_history'] = [{'role': 'user', 'parts': [EMPATHY_PROMPT]}, {'role': 'model', 'parts': [opening_message]}]
     await query.edit_message_text(text=opening_message)
@@ -2008,6 +2026,7 @@ def main():
         # 1. הוספת ConversationHandlers - הם מקבלים עדיפות ראשונה
         application.add_handler(create_support_conversation())
         application.add_handler(panic_conv_handler)
+        application.add_handler(create_navigator_conversation(MAIN_MENU_REGEX))
         application.add_handler(create_quick_report_conversation())
         application.add_handler(create_full_report_conversation())
         application.add_handler(create_venting_conversation())
