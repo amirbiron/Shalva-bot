@@ -17,10 +17,7 @@ from usage_tracker import increment_and_check_usage, ALERT_THRESHOLD
 from telegram_alerter import send_telegram_alert
 from telegram.error import Conflict
 from activity_reporter import create_reporter
-from mental_health_navigator import (
-    start_navigator, handle_navigator_callback, create_navigator_conversation,
-    get_navigator_main_menu
-)
+from mental_health_navigator import create_navigator_conversation
 
 
 # -----------------------------
@@ -348,10 +345,12 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text('כדי להתחיל, אנא לחץ על הכפתור:', reply_markup=reply_markup)
     elif text == "🧠 נווט בריאות הנפש":
-        keyboard = [[InlineKeyboardButton("לחץ כאן לכניסה לנווט", callback_data='mh_main')]]
+        keyboard = [[InlineKeyboardButton("לחץ כאן לכניסה לנווט", callback_data='mh_start_navigator')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text(
-            '🧠 נווט בריאות הנפש - מידע מקיף על שירותי בריאות הנפש בישראל\n\nלחץ על הכפתור להתחלה:',
+            '🧠 נווט בריאות הנפש - סוכן AI שמתמחה בבריאות הנפש בישראל\n\n'
+            'שאלו אותו על זכויות, טיפולים, עלויות, קופות חולים, קווי חירום ועוד.\n\n'
+            'לחץ על הכפתור להתחלה:',
             reply_markup=reply_markup
         )
     else:
@@ -890,11 +889,6 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await show_reminder_settings(query, context)
     elif data == "confirm_reset":
         await reset_user_data(query, context)
-    # נווט בריאות הנפש
-    elif data == "mh_main" or data.startswith("mh_"):
-        # mh_ask_ai is handled by ConversationHandler, skip it here
-        if data != "mh_ask_ai":
-            await handle_navigator_callback(query, context, data, GEMINI_API_KEY)
 
 # =================================================================
 # פונקציות עזר ותצוגה

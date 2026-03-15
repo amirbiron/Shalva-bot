@@ -4,6 +4,7 @@ Israeli Mental Health Navigator Agent
 מבוסס על: https://github.com/skills-il/health-services/tree/master/israeli-mental-health-navigator
 """
 
+import os
 import logging
 import google.generativeai as genai
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
@@ -15,517 +16,218 @@ from telegram.ext import (
 logger = logging.getLogger(__name__)
 
 # =================================================================
-# מצבי שיחה לנווט בריאות הנפש
+# מצב שיחה
 # =================================================================
-MH_ACTIVE = range(200, 201)[0]
-
-# =================================================================
-# מאגר ידע - בריאות הנפש בישראל
-# =================================================================
-
-CRISIS_HOTLINES = {
-    "eran": {
-        "name": "ער\"ן - עזרה ראשונה נפשית",
-        "number": "1201",
-        "hours": "24/7",
-        "description": "תמיכה רגשית, סיוע במשבר, ייעוץ ראשוני. מעל 500,000 שיחות בשנה.",
-        "languages": "עברית, ערבית, רוסית, אמהרית, אנגלית"
-    },
-    "sahar": {
-        "name": "סה\"ר - סיוע והקשבה ברשת",
-        "number": "sahar.org.il",
-        "hours": "24/7",
-        "description": "צ'אט מקוון למי שמעדיפים לכתוב. אנונימי לחלוטין."
-    },
-    "natal": {
-        "name": "נט\"ל - מרכז לנפגעי טראומה",
-        "number": "1-800-363-363",
-        "hours": "ימים א'-ה' 9:00-21:00",
-        "description": "תמיכה מקצועית לנפגעי אירועים ביטחוניים, טראומה ו-PTSD."
-    },
-    "kav_lahaim": {
-        "name": "קו לחיים - מניעת התאבדות",
-        "number": "*2784",
-        "hours": "24/7",
-        "description": "קו חירום למניעת התאבדות. שיחות אנונימיות וחסויות."
-    },
-    "amcha": {
-        "name": "עמח\"א - סיוע לניצולי שואה",
-        "number": "02-5427127",
-        "hours": "ימים א'-ה' 8:00-16:00",
-        "description": "תמיכה נפשית ופסיכולוגית לניצולי השואה ובני דור שני."
-    },
-    "emergency": {
-        "name": "מספרי חירום",
-        "number": "מד\"א: 101 | משטרה: 100 | כיבוי: 102 | חירום כללי: 112",
-        "hours": "24/7",
-        "description": "לסכנת חיים מיידית."
-    }
-}
-
-# סוגי טיפולים
-THERAPY_TYPES = {
-    "cbt": {
-        "name": "CBT - טיפול קוגניטיבי-התנהגותי",
-        "description": "הטיפול הנפוץ ביותר במערכת הציבורית. מתמקד בשינוי דפוסי חשיבה והתנהגות שגורמים למצוקה.",
-        "good_for": "חרדה, דיכאון, פוביות, OCD",
-        "duration": "12-20 מפגשים בדרך כלל",
-        "availability": "זמין בכל קופות החולים"
-    },
-    "emdr": {
-        "name": "EMDR - עיבוד טראומה",
-        "description": "טיפול שמעבד זיכרונות טראומטיים באמצעות תנועות עיניים מונחות. הורחב משמעותית לאחר אוקטובר 2023.",
-        "good_for": "PTSD, טראומה, חרדה פוסט-טראומטית",
-        "duration": "6-12 מפגשים",
-        "availability": "זמין בקופות ובפרטי, הורחב לאחר 7 באוקטובר"
-    },
-    "psychodynamic": {
-        "name": "טיפול פסיכודינמי",
-        "description": "חקירה של דפוסים לא-מודעים, קשרים מוקדמים והשפעתם על ההווה.",
-        "good_for": "קשיים חוזרים ביחסים, דפוסי התנהגות, דיכאון ממושך",
-        "duration": "טווח בינוני-ארוך",
-        "availability": "זמין בפרטי ובחלק מקופות החולים"
-    },
-    "dbt": {
-        "name": "DBT - טיפול דיאלקטי-התנהגותי",
-        "description": "שילוב של CBT עם מיינדפולנס. מתמקד בוויסות רגשי ומיומנויות בין-אישיות.",
-        "good_for": "ויסות רגשי, פגיעה עצמית, הפרעת אישיות גבולית",
-        "duration": "6-12 חודשים",
-        "availability": "זמין בפרטי ובמרכזים מתמחים"
-    },
-    "group": {
-        "name": "טיפול קבוצתי",
-        "description": "טיפול במסגרת קבוצה קטנה, מאפשר שיתוף חוויות ותמיכה הדדית.",
-        "good_for": "חרדה חברתית, אובדן, התמכרויות, PTSD",
-        "duration": "משתנה",
-        "availability": "זמין בקופות ובמרכזים פסיכולוגיים"
-    },
-    "medication": {
-        "name": "טיפול תרופתי",
-        "description": "תרופות פסיכיאטריות (נוגדי דיכאון, תרופות נגד חרדה וכו'). ניתנות ע\"י פסיכיאטר בלבד.",
-        "good_for": "דיכאון, חרדה, הפרעה דו-קוטבית, ADHD",
-        "duration": "משתנה",
-        "availability": "דרך רופא משפחה או פסיכיאטר בקופה"
-    }
-}
-
-# עלויות טיפול
-THERAPY_COSTS = {
-    "kupat_cholim": {
-        "name": "קופת חולים (ציבורי)",
-        "cost": "~34 ₪ לרבעון",
-        "wait_time": "2-8 שבועות",
-        "notes": "מאז 2015, טיפול נפשי הוא חלק מחוק ביטוח בריאות ממלכתי. כל תושב רשום בקופה זכאי."
-    },
-    "private_psychologist": {
-        "name": "פסיכולוג פרטי",
-        "cost": "300-600 ₪ למפגש",
-        "wait_time": "שבוע-שבועיים",
-        "notes": "אפשר לקבל החזר חלקי מביטוח משלים."
-    },
-    "private_psychiatrist": {
-        "name": "פסיכיאטר פרטי",
-        "cost": "500-900 ₪ למפגש",
-        "wait_time": "שבוע-שלושה שבועות",
-        "notes": "רק פסיכיאטר יכול לרשום תרופות."
-    },
-    "social_worker": {
-        "name": "עובד/ת סוציאלי/ת קליני/ת",
-        "cost": "200-450 ₪ למפגש",
-        "wait_time": "שבוע-שבועיים",
-        "notes": "אפשרות טובה ומשתלמת לטיפול רגשי."
-    },
-    "university_clinic": {
-        "name": "מרפאת אוניברסיטה (הכשרה)",
-        "cost": "150-250 ₪ למפגש",
-        "wait_time": "2-4 שבועות",
-        "notes": "מטפלים בהכשרה תחת פיקוח. אפשרות מצוינת במחיר מופחת."
-    },
-    "online": {
-        "name": "פלטפורמות טיפול מקוון",
-        "cost": "200-400 ₪ למפגש",
-        "wait_time": "ימים ספורים",
-        "notes": "נגיש מכל מקום. מתאים למי שמעדיף טיפול מהבית."
-    }
-}
-
-# זכויות בעבודה
-WORKPLACE_RIGHTS = """
-🏢 *זכויות בריאות הנפש במקום העבודה*
-
-📌 *ימי מחלה:*
-• כל עובד צובר 1.5 ימי מחלה לחודש (18 בשנה)
-• ניתן להשתמש בהם גם עבור מצב נפשי
-• אישור מחלה לא צריך לכלול אבחנה מפורטת
-
-📌 *איסור אפליה:*
-• חוק שוויון זכויות לאנשים עם מוגבלות אוסר אפליה על בסיס מצב נפשי
-• מעסיק לא יכול לדרוש פרטי אבחנה
-
-📌 *תוכניות EAP:*
-• מעסיקים רבים מציעים 3-6 מפגשי טיפול חינמיים וחסויים
-• שאל את משאבי אנוש אם קיימת תוכנית כזו
-
-📌 *שמירת סודיות:*
-• המעסיק לא זכאי לדעת את סיבת המחלה
-• אישור רפואי מציין רק ימי היעדרות
-"""
-
-# משאבי PTSD
-PTSD_RESOURCES = """
-🎗️ *משאבי PTSD וטראומה*
-
-📌 *נט\"ל (1-800-363-363):*
-• טיפול מתמחה בנפגעי טראומה ביטחונית
-• ליווי ארוך טווח
-
-📌 *ביטוח לאומי:*
-• PTSD מוכר כמוגבלות
-• אפשר להגיש תביעה לנכות
-• זכאות לטיפולים ושיקום
-
-📌 *קרן OneFamily:*
-• תמיכה בנפגעי טרור ומשפחותיהם
-
-📌 *תוכניות לאחר 7 באוקטובר:*
-• הרחבה משמעותית של טיפולי EMDR
-• מרכזי חוסן קהילתיים ברחבי הארץ
-• קבוצות תמיכה ייעודיות
-"""
+MH_ACTIVE = 200
 
 # =================================================================
-# הפרומפט של סוכן ה-AI
+# הפרומפט של סוכן ה-AI - כל הידע מוזרק לכאן
 # =================================================================
 
 NAVIGATOR_SYSTEM_PROMPT = """אתה סוכן AI מומחה בניווט מערכת בריאות הנפש בישראל.
-תפקידך לעזור למשתמשים למצוא את השירות הנכון עבורם.
+אתה פועל בתוך בוט טלגרם בשם "שלווה". תפקידך לעזור למשתמשים למצוא את השירות הנכון עבורם,
+לענות על שאלות, ולהנגיש מידע מעשי על בריאות הנפש בישראל.
 
-הנה הידע שלך:
+══════════════════════════════════
+מאגר הידע שלך:
+══════════════════════════════════
 
-🔹 זכויות:
-- מאז 2015, טיפול נפשי מכוסה בחוק ביטוח בריאות ממלכתי
-- כל תושב רשום בקופת חולים זכאי לטיפול מסובסד (~34 ₪ לרבעון)
+📌 רפורמת בריאות הנפש (2015):
+- מאז 2015, טיפול נפשי בישראל מכוסה תחת חוק ביטוח בריאות ממלכתי
+- הרפורמה העבירה שירותים פסיכיאטריים ופסיכולוגיים ממרכזים ממשלתיים לקופות החולים
+- כל תושב ישראל הרשום בקופת חולים זכאי לטיפול נפשי מסובסד
 - השירותים כוללים: ייעוץ פסיכיאטרי, פסיכותרפיה, אבחון פסיכולוגי, תרופות
+- השתתפות עצמית: כ-34 ₪ לרבעון
+- לא צריך הפניה מרופא משפחה
 
-🔹 קופות חולים (כללית, מכבי, מאוחדת, לאומית):
-- סינון ראשוני → התאמת מטפל → טיפול שוטף (בדרך כלל שבועי)
-- זמני המתנה: 2-8 שבועות בהתאם לאזור
-- השתתפות עצמית: ~34 ₪ לרבעון
+📌 גישה לטיפול דרך קופות החולים (כללית, מכבי, מאוחדת, לאומית):
+- שלב 1: פנייה למחלקת בריאות הנפש של הקופה
+- שלב 2: סינון ראשוני (בד"כ טלפוני) לקביעת דחיפות ומסלול
+- שלב 3: התאמת מטפל/ת מקצועי/ת
+- שלב 4: התחלת טיפול שוטף (בדרך כלל שבועי, 12-20 מפגשים)
+- זמני המתנה: 2-8 שבועות בהתאם לאזור ולדחיפות
+- טיפ: אם ההמתנה ארוכה, אפשר לבקש הפניה לביטוח המשלים
+- אפשר לבקש החלפת מטפל אם לא מתאים
+- אפשר לשלב טיפול תרופתי ופסיכותרפיה
 
-🔹 קווי חירום:
-- ער"ן (1201): תמיכה רגשית 24/7
-- סה"ר (sahar.org.il): צ'אט מקוון
-- נט"ל (1-800-363-363): טראומה ו-PTSD
-- קו לחיים (*2784): מניעת התאבדות 24/7
-- עמח"א (02-5427127): ניצולי שואה
-- מד"א (101), משטרה (100) לסכנת חיים מיידית
+📌 קווי חירום ותמיכה רגשית:
+- ער"ן (1201): עזרה ראשונה נפשית, תמיכה רגשית 24/7, מעל 500,000 שיחות בשנה. שפות: עברית, ערבית, רוסית, אמהרית, אנגלית
+- סה"ר (sahar.org.il): צ'אט מקוון 24/7 למי שמעדיפים לכתוב. אנונימי לחלוטין
+- נט"ל (1-800-363-363): מרכז לנפגעי טראומה, תמיכה מקצועית לנפגעי אירועים ביטחוניים, ימים א'-ה' 9:00-21:00
+- קו לחיים (*2784): מניעת התאבדות 24/7, שיחות אנונימיות וחסויות
+- עמח"א (02-5427127): סיוע לניצולי שואה ובני דור שני, ימים א'-ה' 8:00-16:00
+- קווים ייעודיים: קווים לנוער, נשים במצוקה, קהילה גאה, דוברי ערבית/רוסית/אמהרית
+- מספרי חירום: מד"א 101, משטרה 100, כיבוי 102, חירום כללי 112
+- כל השיחות אנונימיות וחינמיות. לא חייבים להיות במשבר כדי להתקשר
 
-🔹 סוגי טיפול:
-- CBT: הנפוץ ביותר, לחרדה ודיכאון
-- EMDR: לטראומה ו-PTSD (הורחב לאחר 7.10)
-- פסיכודינמי: לדפוסים חוזרים
-- DBT: לוויסות רגשי
-- טיפול קבוצתי, טיפול תרופתי, טיפול באמנות
+📌 סוגי טיפולים:
+- CBT (קוגניטיבי-התנהגותי): הנפוץ ביותר במערכת הציבורית. מתמקד בשינוי דפוסי חשיבה והתנהגות. מתאים לחרדה, דיכאון, פוביות, OCD. בדרך כלל 12-20 מפגשים. זמין בכל קופות החולים
+- EMDR (עיבוד טראומה): מעבד זיכרונות טראומטיים באמצעות תנועות עיניים מונחות. מתאים ל-PTSD, טראומה. 6-12 מפגשים. הורחב משמעותית לאחר 7 באוקטובר
+- פסיכודינמי: חקירה של דפוסים לא-מודעים וקשרים מוקדמים. מתאים לקשיים חוזרים ביחסים, דפוסי התנהגות, דיכאון ממושך. טווח בינוני-ארוך
+- DBT (דיאלקטי-התנהגותי): שילוב CBT עם מיינדפולנס. מתאים לוויסות רגשי, פגיעה עצמית, הפרעת אישיות גבולית. 6-12 חודשים
+- טיפול קבוצתי: במסגרת קבוצה קטנה, שיתוף חוויות ותמיכה הדדית. מתאים לחרדה חברתית, אובדן, התמכרויות
+- טיפול תרופתי: ניתן ע"י פסיכיאטר בלבד. נוגדי דיכאון, תרופות נגד חרדה וכו'. מתאים לדיכאון, חרדה, הפרעה דו-קוטבית, ADHD
+- טיפול באמנות/משחק: מתאים במיוחד לילדים ולנפגעי טראומה שמתקשים בהבעה מילולית
 
-🔹 עלויות פרטי:
-- פסיכולוג: 300-600 ₪ | פסיכיאטר: 500-900 ₪
-- עו"ס קליני: 200-450 ₪ | מרפאת אוניברסיטה: 150-250 ₪
-- אונליין: 200-400 ₪
+📌 עלויות טיפול:
+- קופת חולים (ציבורי): ~34 ₪ לרבעון, המתנה 2-8 שבועות
+- פסיכולוג פרטי: 300-600 ₪ למפגש, אפשר החזר חלקי מביטוח משלים
+- פסיכיאטר פרטי: 500-900 ₪ למפגש, רק פסיכיאטר יכול לרשום תרופות
+- עו"ס קליני/ת: 200-450 ₪ למפגש, אפשרות טובה ומשתלמת
+- מרפאת אוניברסיטה (הכשרה): 150-250 ₪ למפגש, מטפלים בהכשרה תחת פיקוח
+- פלטפורמות טיפול מקוון: 200-400 ₪ למפגש, נגיש מכל מקום
+- טיפ: בדוק ביטוח משלים - הרבה מציעים החזר חלקי על טיפולים פרטיים
+- ניכוי מס: אפשר לנכות הוצאות רפואיות מעל תקרה מסוימת (סעיף 44 לפקודת מס הכנסה)
 
-🔹 זכויות בעבודה:
-- 1.5 ימי מחלה בחודש (18 בשנה) - גם למצב נפשי
-- איסור אפליה על בסיס מצב נפשי
-- מעסיק לא יכול לדרוש פרטי אבחנה
-- תוכניות EAP: 3-6 מפגשים חינמיים
+📌 זכויות בריאות הנפש בעבודה:
+- כל עובד צובר 1.5 ימי מחלה לחודש (18 בשנה) - ניתן להשתמש גם למצב נפשי
+- חוק שוויון זכויות לאנשים עם מוגבלות אוסר אפליה על בסיס מצב נפשי
+- מעסיק לא יכול לדרוש פרטי אבחנה - אישור מחלה מציין רק ימי היעדרות
+- תוכניות EAP (Employee Assistance Programs): מעסיקים רבים מציעים 3-6 מפגשי טיפול חינמיים וחסויים
+- זכויות מיוחדות: היעדרות בגלל מצב נפשי מוגנת כמו כל מחלה אחרת
 
-🔹 PTSD:
-- ביטוח לאומי מכיר ב-PTSD כמוגבלות
-- נט"ל, קרן OneFamily, מרכזי חוסן
+📌 PTSD ומשאבי טראומה:
+- נט"ל (1-800-363-363): טיפול מתמחה בנפגעי טראומה ביטחונית, ליווי ארוך טווח
+- ביטוח לאומי: PTSD מוכר כמוגבלות, אפשר להגיש תביעה לנכות, זכאות לטיפולים ושיקום
+- קרן OneFamily: תמיכה בנפגעי טרור ומשפחותיהם
+- תוכניות לאחר 7 באוקטובר: הרחבה משמעותית של טיפולי EMDR, מרכזי חוסן קהילתיים ברחבי הארץ, קבוצות תמיכה ייעודיות
+- חיילים ומשרתי מילואים: זכאות לטיפול דרך אגף השיקום במשרד הביטחון
 
-הנחיות:
-1. ענה תמיד בעברית
-2. היה אמפתי, חם ומקצועי
-3. הפנה לקווי חירום כשיש צורך דחוף
-4. תן מידע מעשי וספציפי
-5. הבהר שאתה לא מחליף טיפול מקצועי
-6. אם מישהו בסכנה - הפנה מיד ל-101 או *2784
-7. היה רגיש לקונטקסט הישראלי (צבא, מילואים, מצב ביטחוני, שואה)
+📌 טיפול בפתרון בעיות נפוצות:
+- זמני המתנה ארוכים: לבקש הפניה לביטוח משלים, לפנות למרפאת אוניברסיטה, לשקול טיפול מקוון
+- "רק מקרים חמורים מקבלים טיפול": לא נכון! כל תושב זכאי, גם בלי אבחנה חמורה
+- מעסיק מבקש פרטי אבחנה: לא חוקי! אישור רפואי מציין רק ימי היעדרות
+
+══════════════════════════════════
+הנחיות התנהגות:
+══════════════════════════════════
+1. ענה תמיד בעברית, בשפה ברורה ונגישה
+2. היה אמפתי, חם ומקצועי - אבל מעשי ותכליתי
+3. תן מידע ספציפי עם מספרים, עלויות, ושלבים ברורים
+4. אם מישהו מזכיר מצוקה חריפה, מחשבות אובדניות או סכנה - הפנה מיד לקו לחיים (*2784) או מד"א (101)
+5. הבהר תמיד שאתה כלי מידע ולא מחליף ייעוץ מקצועי
+6. היה רגיש לקונטקסט הישראלי: צבא, מילואים, מצב ביטחוני, שואה, 7 באוקטובר
+7. כשמתאים, הצע כמה אפשרויות ותן למשתמש לבחור
+8. אל תאבחן - רק תכוון לשירות המתאים
 """
 
 # =================================================================
-# פונקציות הנווט
+# כפתורי קיצור - כל אחד שולח שאלה מוגדרת מראש ל-AI
 # =================================================================
 
-def get_navigator_main_menu():
-    """תפריט ראשי של הנווט"""
+TOPIC_SHORTCUTS = {
+    "mh_topic_hotlines": "מה קווי החירום והתמיכה הרגשית הזמינים בישראל? תן לי את כל המספרים והפרטים.",
+    "mh_topic_kupat": "איך מתחילים טיפול נפשי דרך קופת החולים? תסביר שלב אחר שלב.",
+    "mh_topic_types": "מה סוגי הטיפולים הנפשיים שזמינים בישראל? תסביר כל אחד בקצרה ולמי הוא מתאים.",
+    "mh_topic_costs": "כמה עולה טיפול נפשי בישראל? תן לי טווחי מחירים לכל סוג מטפל ומסלול.",
+    "mh_topic_workplace": "מה הזכויות שלי בנושא בריאות הנפש במקום העבודה?",
+    "mh_topic_ptsd": "מה המשאבים שזמינים בישראל לטיפול ב-PTSD וטראומה? כולל אחרי 7 באוקטובר.",
+}
+
+
+def get_topic_shortcuts_keyboard():
+    """כפתורי קיצור לנושאים פופולריים"""
     keyboard = [
-        [InlineKeyboardButton("📞 קווי חירום ותמיכה", callback_data="mh_hotlines")],
-        [InlineKeyboardButton("🏥 איך מתחילים טיפול בקופה?", callback_data="mh_kupat_cholim")],
-        [InlineKeyboardButton("💊 סוגי טיפולים", callback_data="mh_therapy_types")],
-        [InlineKeyboardButton("💰 עלויות טיפול", callback_data="mh_costs")],
-        [InlineKeyboardButton("🏢 זכויות בעבודה", callback_data="mh_workplace")],
-        [InlineKeyboardButton("🎗️ PTSD וטראומה", callback_data="mh_ptsd")],
-        [InlineKeyboardButton("🤖 שאל אותי שאלה חופשית", callback_data="mh_ask_ai")],
-        [InlineKeyboardButton("🏠 חזרה לתפריט הראשי", callback_data="main_menu")],
+        [InlineKeyboardButton("📞 קווי חירום", callback_data="mh_topic_hotlines")],
+        [InlineKeyboardButton("🏥 טיפול בקופה", callback_data="mh_topic_kupat"),
+         InlineKeyboardButton("💊 סוגי טיפולים", callback_data="mh_topic_types")],
+        [InlineKeyboardButton("💰 עלויות", callback_data="mh_topic_costs"),
+         InlineKeyboardButton("🏢 זכויות בעבודה", callback_data="mh_topic_workplace")],
+        [InlineKeyboardButton("🎗️ PTSD וטראומה", callback_data="mh_topic_ptsd")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
 
-def format_hotlines_message():
-    """עיצוב הודעת קווי חירום"""
-    lines = ["📞 *קווי חירום ותמיכה רגשית בישראל*\n"]
-    for key, info in CRISIS_HOTLINES.items():
-        lines.append(f"🔹 *{info['name']}*")
-        lines.append(f"   📱 {info['number']}")
-        lines.append(f"   🕐 {info['hours']}")
-        lines.append(f"   {info['description']}")
-        if 'languages' in info:
-            lines.append(f"   🌐 {info['languages']}")
-        lines.append("")
-    lines.append("💙 השיחות אנונימיות וחינמיות. לא חייבים להיות במשבר כדי להתקשר.")
-    return "\n".join(lines)
+# =================================================================
+# פונקציות שיחה
+# =================================================================
 
-
-def format_kupat_cholim_message():
-    """עיצוב הודעת מידע על קופות חולים"""
-    return """
-🏥 *איך מתחילים טיפול נפשי דרך קופת החולים?*
-
-📌 *שלב 1: פנייה*
-התקשר/י למחלקת בריאות הנפש של הקופה שלך:
-• כללית | מכבי | מאוחדת | לאומית
-
-📌 *שלב 2: סינון ראשוני*
-שיחת הערכה קצרה (בד"כ טלפונית) לקביעת דחיפות ומסלול
-
-📌 *שלב 3: התאמת מטפל*
-הקופה תתאים לך מטפל/ת בהתאם לצורך
-
-📌 *שלב 4: התחלת טיפול*
-מפגשים שבועיים, בדרך כלל 12-20 מפגשים
-
-💰 *עלות:* ~34 ₪ לרבעון (השתתפות עצמית מסובסדת)
-⏰ *זמני המתנה:* 2-8 שבועות בהתאם לאזור
-
-💡 *טיפים:*
-• אם ההמתנה ארוכה, בקש/י הפניה לביטוח המשלים
-• אפשר לבקש החלפת מטפל אם לא מתאים
-• אפשר לשלב טיפול תרופתי ופסיכותרפיה
-• לא צריך הפניה מרופא המשפחה (מאז הרפורמה)
-"""
-
-
-def format_therapy_types_menu():
-    """תפריט סוגי טיפולים"""
-    keyboard = []
-    for key, info in THERAPY_TYPES.items():
-        keyboard.append([InlineKeyboardButton(info['name'], callback_data=f"mh_therapy_{key}")])
-    keyboard.append([InlineKeyboardButton("🔙 חזור", callback_data="mh_main")])
-    return InlineKeyboardMarkup(keyboard)
-
-
-def format_therapy_detail(therapy_key):
-    """עיצוב פרטי סוג טיפול"""
-    info = THERAPY_TYPES.get(therapy_key)
-    if not info:
-        return "סוג טיפול לא נמצא."
-    return f"""
-💊 *{info['name']}*
-
-📝 {info['description']}
-
-✅ *מתאים ל:* {info['good_for']}
-⏱️ *משך:* {info['duration']}
-🏥 *זמינות:* {info['availability']}
-"""
-
-
-def format_costs_message():
-    """עיצוב הודעת עלויות"""
-    lines = ["💰 *עלויות טיפול נפשי בישראל*\n"]
-    for key, info in THERAPY_COSTS.items():
-        lines.append(f"🔹 *{info['name']}*")
-        lines.append(f"   💰 {info['cost']}")
-        lines.append(f"   ⏰ המתנה: {info['wait_time']}")
-        lines.append(f"   📝 {info['notes']}")
-        lines.append("")
-    lines.append("💡 *טיפ:* בדוק/בדקי אם יש לך ביטוח משלים - הרבה ביטוחים מציעים החזר חלקי על טיפולים פרטיים.")
-    return "\n".join(lines)
-
-
-def format_cost_estimate(therapy_type, sessions_per_month):
-    """חישוב הערכת עלות"""
-    cost_data = THERAPY_COSTS.get(therapy_type)
-    if not cost_data:
+async def _send_to_ai(context, user_message):
+    """שליחת הודעה ל-AI וקבלת תשובה"""
+    model = context.user_data.get('mh_navigator_model')
+    if not model:
         return None
 
-    cost_str = cost_data['cost']
-    # ניסיון לחלץ טווח מחירים
-    import re
-    numbers = re.findall(r'\d+', cost_str.replace(',', ''))
-    if len(numbers) >= 2:
-        low = int(numbers[0])
-        high = int(numbers[1])
-        monthly_low = low * sessions_per_month
-        monthly_high = high * sessions_per_month
-        annual_low = monthly_low * 12
-        annual_high = monthly_high * 12
-        return f"""
-💰 *הערכת עלות: {cost_data['name']}*
+    chat = model.start_chat(history=context.user_data.get('mh_chat_history', []))
+    response = await chat.send_message_async(user_message)
+    bot_response = response.text
 
-📊 *{sessions_per_month} מפגשים בחודש:*
-• חודשי: {monthly_low:,}-{monthly_high:,} ₪
-• שנתי: {annual_low:,}-{annual_high:,} ₪
+    context.user_data['mh_chat_history'].append({'role': 'user', 'parts': [user_message]})
+    context.user_data['mh_chat_history'].append({'role': 'model', 'parts': [bot_response]})
 
-📝 {cost_data['notes']}
-"""
-    elif len(numbers) == 1:
-        cost = int(numbers[0])
-        monthly = cost * sessions_per_month
-        annual = monthly * 12
-        return f"""
-💰 *הערכת עלות: {cost_data['name']}*
-
-📊 *{sessions_per_month} מפגשים בחודש:*
-• חודשי: ~{monthly:,} ₪
-• שנתי: ~{annual:,} ₪
-
-📝 {cost_data['notes']}
-"""
-    return None
+    return bot_response
 
 
-# =================================================================
-# Handler Functions
-# =================================================================
-
-async def start_navigator(query, context):
-    """התחלת הנווט מהתפריט הראשי"""
-    message = """
-🧠 *נווט בריאות הנפש - ישראל*
-
-ברוכים הבאים! כאן תמצאו מידע מקיף על שירותי בריאות הנפש בישראל.
-
-אני יכול לעזור לכם עם:
-• מציאת קווי חירום ותמיכה
-• הבנת הזכויות שלכם לטיפול נפשי
-• מידע על סוגי טיפולים
-• הערכת עלויות
-• זכויות בעבודה
-• משאבי PTSD וטראומה
-
-⚠️ *שימו לב:* אני כלי מידע בלבד ולא מחליף ייעוץ מקצועי.
-במצב חירום התקשרו ל-1201 (ער\"ן) או *2784 (קו לחיים).
-
-בחרו נושא:
-"""
-    await query.edit_message_text(
-        text=message,
-        reply_markup=get_navigator_main_menu(),
-        parse_mode='Markdown'
+def _init_ai_session(context):
+    """אתחול סשן AI חדש"""
+    context.user_data['mh_navigator_model'] = genai.GenerativeModel('gemini-1.5-flash')
+    opening = (
+        "🧠 נווט בריאות הנפש - ישראל\n\n"
+        "היי! אני סוכן AI שמתמחה בבריאות הנפש בישראל.\n"
+        "אפשר לשאול אותי כל שאלה - על זכויות, טיפולים, עלויות, קופות חולים, "
+        "קווי חירום, PTSD, זכויות בעבודה, ועוד.\n\n"
+        "אפשר גם לבחור נושא מהכפתורים למטה, או פשוט לכתוב שאלה חופשית.\n\n"
+        "לסיום: /end_navigator"
     )
+    context.user_data['mh_chat_history'] = [
+        {'role': 'user', 'parts': [NAVIGATOR_SYSTEM_PROMPT]},
+        {'role': 'model', 'parts': [opening]}
+    ]
+    return opening
 
 
-async def handle_navigator_callback(query, context, data, gemini_api_key):
-    """טיפול בלחיצות כפתור של הנווט"""
-    back_to_nav = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 חזור לנווט", callback_data="mh_main")],
-        [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
-    ])
+async def entry_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """נקודת כניסה: המשתמש לחץ על כפתור הנווט"""
+    query = update.callback_query
+    await query.answer()
 
-    if data == "mh_main":
-        await start_navigator(query, context)
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if not gemini_api_key:
+        await query.edit_message_text("שירות ה-AI אינו זמין כרגע.")
+        return ConversationHandler.END
 
-    elif data == "mh_hotlines":
-        await query.edit_message_text(
-            text=format_hotlines_message(),
-            reply_markup=back_to_nav,
-            parse_mode='Markdown'
-        )
+    opening = _init_ai_session(context)
+    await query.edit_message_text(text=opening, reply_markup=get_topic_shortcuts_keyboard())
+    return MH_ACTIVE
 
-    elif data == "mh_kupat_cholim":
-        await query.edit_message_text(
-            text=format_kupat_cholim_message(),
-            reply_markup=back_to_nav,
-            parse_mode='Markdown'
-        )
 
-    elif data == "mh_therapy_types":
-        await query.edit_message_text(
-            text="💊 *סוגי טיפולים נפשיים בישראל*\n\nבחר/י סוג טיפול לפרטים נוספים:",
-            reply_markup=format_therapy_types_menu(),
-            parse_mode='Markdown'
-        )
+async def handle_topic_shortcut(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """טיפול בלחיצה על כפתור קיצור - שולח שאלה מוגדרת ל-AI"""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
 
-    elif data.startswith("mh_therapy_"):
-        therapy_key = data.replace("mh_therapy_", "")
-        detail = format_therapy_detail(therapy_key)
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 חזור לסוגי טיפולים", callback_data="mh_therapy_types")],
-            [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
-        ])
-        await query.edit_message_text(
-            text=detail,
-            reply_markup=keyboard,
-            parse_mode='Markdown'
-        )
+    shortcut_question = TOPIC_SHORTCUTS.get(data)
+    if not shortcut_question:
+        return MH_ACTIVE
 
-    elif data == "mh_costs":
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 חזור לנווט", callback_data="mh_main")],
-            [InlineKeyboardButton("🏠 תפריט ראשי", callback_data="main_menu")]
-        ])
-        await query.edit_message_text(
-            text=format_costs_message(),
-            reply_markup=keyboard,
-            parse_mode='Markdown'
-        )
+    # הצגת אינדיקציה שהבוט מעבד
+    await query.edit_message_text("⏳ מחפש מידע...")
 
-    elif data == "mh_workplace":
-        await query.edit_message_text(
-            text=WORKPLACE_RIGHTS,
-            reply_markup=back_to_nav,
-            parse_mode='Markdown'
-        )
-
-    elif data == "mh_ptsd":
-        await query.edit_message_text(
-            text=PTSD_RESOURCES,
-            reply_markup=back_to_nav,
-            parse_mode='Markdown'
-        )
-
-    elif data == "mh_ask_ai":
-        if not gemini_api_key:
+    try:
+        bot_response = await _send_to_ai(context, shortcut_question)
+        if bot_response:
             await query.edit_message_text(
-                text="שירות ה-AI אינו זמין כרגע. נסה שוב מאוחר יותר.",
-                reply_markup=back_to_nav
+                text=bot_response,
+                reply_markup=get_topic_shortcuts_keyboard()
             )
-            return False
-
-        # אתחול מודל Gemini לשיחת ניווט
-        context.user_data['mh_navigator_model'] = genai.GenerativeModel('gemini-1.5-flash')
-        opening = (
-            "🤖 *סוכן ניווט בריאות הנפש*\n\n"
-            "שאל/י אותי כל שאלה על בריאות הנפש בישראל:\n"
-            "• זכויות, טיפולים, עלויות\n"
-            "• קופות חולים, ביטוח משלים\n"
-            "• קווי חירום ומשאבים\n"
-            "• PTSD, חרדה, דיכאון\n\n"
-            "לסיום השיחה שלח/י /end_navigator"
+        else:
+            await query.edit_message_text(
+                "מצטער, קרתה שגיאה. נסה שוב.",
+                reply_markup=get_topic_shortcuts_keyboard()
+            )
+    except Exception as e:
+        logger.error(f"Navigator AI shortcut error: {e}")
+        await query.edit_message_text(
+            "מצטער, קרתה שגיאה. נסה שוב או כתוב שאלה חופשית.",
+            reply_markup=get_topic_shortcuts_keyboard()
         )
-        context.user_data['mh_chat_history'] = [
-            {'role': 'user', 'parts': [NAVIGATOR_SYSTEM_PROMPT]},
-            {'role': 'model', 'parts': [opening]}
-        ]
-        await query.edit_message_text(text=opening, parse_mode='Markdown')
-        return True  # signals ConversationHandler to enter MH_ACTIVE state
 
-    return False
+    return MH_ACTIVE
 
 
 async def handle_navigator_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """טיפול בהודעות חופשיות בשיחת AI של הנווט"""
+    """טיפול בהודעת טקסט חופשית - שליחה ל-AI"""
     user_message = update.message.text
     model = context.user_data.get('mh_navigator_model')
 
@@ -540,14 +242,17 @@ async def handle_navigator_message(update: Update, context: ContextTypes.DEFAULT
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
 
     try:
-        chat = model.start_chat(history=context.user_data.get('mh_chat_history', []))
-        response = await chat.send_message_async(user_message)
-        bot_response = response.text
-
-        context.user_data['mh_chat_history'].append({'role': 'user', 'parts': [user_message]})
-        context.user_data['mh_chat_history'].append({'role': 'model', 'parts': [bot_response]})
-
-        await update.message.reply_text(bot_response)
+        bot_response = await _send_to_ai(context, user_message)
+        if bot_response:
+            await update.message.reply_text(
+                bot_response,
+                reply_markup=get_topic_shortcuts_keyboard()
+            )
+        else:
+            await update.message.reply_text(
+                "מצטער, קרתה שגיאה. נסה שוב.",
+                reply_markup=get_topic_shortcuts_keyboard()
+            )
     except Exception as e:
         logger.error(f"Navigator AI error: {e}")
         await update.message.reply_text(
@@ -558,7 +263,7 @@ async def handle_navigator_message(update: Update, context: ContextTypes.DEFAULT
 
 
 async def end_navigator_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """סיום שיחת AI של הנווט"""
+    """סיום שיחת הנווט"""
     from main import get_main_keyboard
     context.user_data.pop('mh_navigator_model', None)
     context.user_data.pop('mh_chat_history', None)
@@ -571,8 +276,12 @@ async def end_navigator_chat(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
+# =================================================================
+# ConversationHandler
+# =================================================================
+
 def create_navigator_conversation(main_menu_regex):
-    """יצירת ConversationHandler לשיחת AI של הנווט"""
+    """יצירת ConversationHandler לנווט בריאות הנפש"""
 
     async def ask_to_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [[
@@ -599,42 +308,16 @@ def create_navigator_conversation(main_menu_regex):
         await query.edit_message_text("ממשיכים. מה השאלה שלך?")
         return MH_ACTIVE
 
-    async def entry_from_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        """Entry point: user clicked 'start_mh_ai' callback"""
-        query = update.callback_query
-        await query.answer()
-
-        gemini_api_key = os.environ.get("GEMINI_API_KEY")
-        if not gemini_api_key:
-            await query.edit_message_text("שירות ה-AI אינו זמין כרגע.")
-            return ConversationHandler.END
-
-        context.user_data['mh_navigator_model'] = genai.GenerativeModel('gemini-1.5-flash')
-        opening = (
-            "🤖 סוכן ניווט בריאות הנפש\n\n"
-            "שאל/י אותי כל שאלה על בריאות הנפש בישראל:\n"
-            "• זכויות, טיפולים, עלויות\n"
-            "• קופות חולים, ביטוח משלים\n"
-            "• קווי חירום ומשאבים\n"
-            "• PTSD, חרדה, דיכאון\n\n"
-            "לסיום השיחה שלח/י /end_navigator"
-        )
-        context.user_data['mh_chat_history'] = [
-            {'role': 'user', 'parts': [NAVIGATOR_SYSTEM_PROMPT]},
-            {'role': 'model', 'parts': [opening]}
-        ]
-        await query.edit_message_text(text=opening)
-        return MH_ACTIVE
-
-    import os
-
     return ConversationHandler(
-        entry_points=[CallbackQueryHandler(entry_from_callback, pattern="^mh_ask_ai$")],
+        entry_points=[
+            CallbackQueryHandler(entry_from_callback, pattern="^mh_start_navigator$"),
+        ],
         states={
             MH_ACTIVE: [
                 CommandHandler("end_navigator", end_navigator_chat),
                 CallbackQueryHandler(perform_cancel, pattern="^cancel_mh_conversation$"),
                 CallbackQueryHandler(perform_continue, pattern="^continue_mh_conversation$"),
+                CallbackQueryHandler(handle_topic_shortcut, pattern="^mh_topic_"),
                 MessageHandler(filters.Regex(main_menu_regex), ask_to_cancel),
                 MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(main_menu_regex), handle_navigator_message),
             ],
