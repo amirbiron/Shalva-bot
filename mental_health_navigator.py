@@ -281,9 +281,13 @@ TELEGRAM_MSG_LIMIT = 4096
 
 def _split_message(text, limit=TELEGRAM_MSG_LIMIT):
     """פיצול הודעה ארוכה לחלקים שמתאימים למגבלת טלגרם, עם חיתוך בשורות ריקות"""
+    text = text.strip()
+    if not text:
+        return [text]
     if len(text) <= limit:
         return [text]
 
+    original = text
     chunks = []
     while text:
         if len(text) <= limit:
@@ -299,7 +303,7 @@ def _split_message(text, limit=TELEGRAM_MSG_LIMIT):
             split_at = limit
         chunks.append(text[:split_at])
         text = text[split_at:].lstrip('\n')
-    return [c for c in chunks if c.strip()]
+    return [c for c in chunks if c.strip()] or [original]
 
 
 # =================================================================
