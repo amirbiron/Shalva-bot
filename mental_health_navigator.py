@@ -6,6 +6,7 @@ Israeli Mental Health Navigator Agent
 
 import os
 import logging
+from datetime import timedelta
 import google.generativeai as genai
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import (
@@ -328,4 +329,5 @@ def create_navigator_conversation(main_menu_regex):
         ],
         name="navigator_conversation",
         persistent=False,
+        conversation_timeout=timedelta(minutes=30).total_seconds(),  # מניעת שיחות תקועות
     )

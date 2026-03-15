@@ -251,6 +251,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.pop('gemini_model', None)
         context.user_data.pop('chat_history', None)
         logger.info(f"Forcefully cleaned up a stuck AI conversation for user {user_id}.")
+    # ניקוי שיחת נווט בריאות הנפש תקועה
+    if 'mh_navigator_model' in context.user_data or 'mh_chat_history' in context.user_data:
+        context.user_data.pop('mh_navigator_model', None)
+        context.user_data.pop('mh_chat_history', None)
+        logger.info(f"Forcefully cleaned up a stuck navigator conversation for user {user_id}.")
     # ----------------------------------------------------
 
     # בדיקה אם המשתמש קיים במערכת (הקוד הקיים שלך)
