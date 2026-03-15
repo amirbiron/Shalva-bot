@@ -1,0 +1,11 @@
+{
+  "name": "Shalva Bot - בוט תמיכה רגשית",
+  "repo": "https://github.com/amirbiron/Shalva-bot",
+  "tags": ["telegram-bot", "python", "gemini-ai", "mongodb", "mental-health", "nlp", "chatbot"],
+  "highlights": [
+    "בוט טלגרם לתמיכה רגשית וניהול חרדה מבוסס Gemini AI",
+    "מעקב מצב חרדה עם גרפים, היסטוריה והמלצות מותאמות אישית",
+    "שיחות אמפתיות בעברית עם שמירה על פרטיות",
+    "כלים מרגיעים: שירים, טכניקות הרגעה, פריקה חופשית"
+  ]
+}
