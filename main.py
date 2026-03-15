@@ -674,7 +674,7 @@ async def start_support_chat(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await query.edit_message_text("שירות השיחה אינו זמין כרגע.")
         return ConversationHandler.END
 
-    context.user_data['gemini_model'] = genai.GenerativeModel('gemini-1.5-flash')
+    context.user_data['gemini_model'] = genai.GenerativeModel('gemini-2.5-flash')
     opening_message = "אני כאן, איתך. מה יושב לך על הלב?\nכדי לסיים את השיחה ולחזור לתפריט, שלח /end_chat."
     context.user_data['chat_history'] = [{'role': 'user', 'parts': [EMPATHY_PROMPT]}, {'role': 'model', 'parts': [opening_message]}]
     await query.edit_message_text(text=opening_message)
