@@ -15,6 +15,9 @@ from telegram.ext import (
     filters, CommandHandler
 )
 
+from usage_tracker import increment_and_check_usage, ALERT_THRESHOLD
+from telegram_alerter import send_telegram_alert
+
 logger = logging.getLogger(__name__)
 
 # =================================================================
@@ -261,10 +264,17 @@ def get_topic_shortcuts_keyboard():
 # =================================================================
 
 async def _send_to_ai(context, user_message):
-    """שליחת הודעה ל-AI וקבלת תשובה"""
+    """שליחת הודעה ל-AI וקבלת תשובה, עם מעקב שימוש והתראות"""
     model = context.user_data.get('mh_navigator_model')
     if not model:
         return None
+
+    # מעקב שימוש יומי והתראת טלגרם
+    current_count = increment_and_check_usage()
+    if current_count == ALERT_THRESHOLD:
+        await send_telegram_alert(
+            f"⚠️ התראה: התקרבות למכסת Gemini!\nשימוש נוכחי: {current_count}/{ALERT_THRESHOLD + 1}."
+        )
 
     chat = model.start_chat(history=context.user_data.get('mh_chat_history', []))
     response = await chat.send_message_async(user_message)
@@ -405,6 +415,15 @@ async def end_navigator_chat(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 
+async def fallback_start_from_navigator(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """ניקוי נתוני הנווט והפעלת /start האמיתי"""
+    context.user_data.pop('mh_navigator_model', None)
+    context.user_data.pop('mh_chat_history', None)
+    from main import start
+    await start(update, context)
+    return ConversationHandler.END
+
+
 # =================================================================
 # ConversationHandler
 # =================================================================
@@ -453,7 +472,7 @@ def create_navigator_conversation(main_menu_regex):
         },
         fallbacks=[
             CommandHandler("end_navigator", end_navigator_chat),
-            CommandHandler("start", end_navigator_chat),
+            CommandHandler("start", fallback_start_from_navigator),
         ],
         name="navigator_conversation",
         persistent=False,
