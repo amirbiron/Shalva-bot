@@ -276,19 +276,24 @@ async def _send_to_ai(context, user_message):
             f"⚠️ התראה: התקרבות למכסת Gemini!\nשימוש נוכחי: {current_count}/{ALERT_THRESHOLD + 1}."
         )
 
-    chat = model.start_chat(history=context.user_data.get('mh_chat_history', []))
+    history = context.user_data.get('mh_chat_history', [])
+    chat = model.start_chat(history=history)
     response = await chat.send_message_async(user_message)
     bot_response = response.text
 
-    context.user_data['mh_chat_history'].append({'role': 'user', 'parts': [user_message]})
-    context.user_data['mh_chat_history'].append({'role': 'model', 'parts': [bot_response]})
+    history.append({'role': 'user', 'parts': [user_message]})
+    history.append({'role': 'model', 'parts': [bot_response]})
+    context.user_data['mh_chat_history'] = history
 
     return bot_response
 
 
 def _init_ai_session(context):
-    """אתחול סשן AI חדש"""
-    context.user_data['mh_navigator_model'] = genai.GenerativeModel('gemini-2.5-flash')
+    """אתחול סשן AI חדש עם system_instruction"""
+    context.user_data['mh_navigator_model'] = genai.GenerativeModel(
+        'gemini-2.5-flash',
+        system_instruction=NAVIGATOR_SYSTEM_PROMPT
+    )
     opening = (
         "🧠 נווט בריאות הנפש - ישראל\n\n"
         "היי! אני סוכן AI שמתמחה בבריאות הנפש בישראל.\n"
@@ -297,10 +302,7 @@ def _init_ai_session(context):
         "אפשר גם לבחור נושא מהכפתורים למטה, או פשוט לכתוב שאלה חופשית.\n\n"
         "לסיום: /end_navigator"
     )
-    context.user_data['mh_chat_history'] = [
-        {'role': 'user', 'parts': [NAVIGATOR_SYSTEM_PROMPT]},
-        {'role': 'model', 'parts': [opening]}
-    ]
+    context.user_data['mh_chat_history'] = []
     return opening
 
 
