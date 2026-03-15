@@ -292,15 +292,15 @@ def _split_message(text, limit=TELEGRAM_MSG_LIMIT):
             break
         # חיפוש שורה ריקה (גבול פסקה) קרוב ככל האפשר ל-limit
         split_at = text.rfind('\n\n', 0, limit)
-        if split_at == -1:
-            # אם אין פסקה, חיתוך בשורה רגילה
+        if split_at <= 0:
+            # אם אין פסקה (או בתחילת הטקסט), חיתוך בשורה רגילה
             split_at = text.rfind('\n', 0, limit)
-        if split_at == -1:
+        if split_at <= 0:
             # מקרה קיצון - חיתוך במגבלה
             split_at = limit
         chunks.append(text[:split_at])
         text = text[split_at:].lstrip('\n')
-    return chunks
+    return [c for c in chunks if c.strip()]
 
 
 # =================================================================
@@ -378,10 +378,9 @@ async def handle_topic_shortcut(update: Update, context: ContextTypes.DEFAULT_TY
     if not shortcut_question:
         return MH_ACTIVE
 
-    # הצגת אינדיקציה שהבוט מעבד
-    await query.edit_message_text("⏳ מחפש מידע...")
-
     try:
+        # הצגת אינדיקציה שהבוט מעבד
+        await query.edit_message_text("⏳ מחפש מידע...")
         bot_response = await _send_to_ai(context, shortcut_question)
         if bot_response:
             chunks = _split_message(bot_response)
