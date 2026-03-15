@@ -367,21 +367,22 @@ async def handle_topic_shortcut(update: Update, context: ContextTypes.DEFAULT_TY
         bot_response = await _send_to_ai(context, shortcut_question)
         if bot_response:
             chunks = _split_message(bot_response)
-            # חלק ראשון מחליף את הודעת "מחפש מידע..."
-            await query.edit_message_text(text=chunks[0])
-            chat_id = query.message.chat_id
-            # חלקים נוספים נשלחים כהודעות חדשות
-            for chunk in chunks[1:-1]:
-                await context.bot.send_message(chat_id=chat_id, text=chunk)
-            # חלק אחרון (או יחיד אם אין פיצול) מקבל את הכפתורים
-            if len(chunks) > 1:
+            if len(chunks) == 1:
+                # חלק יחיד - edit אחד עם כפתורים
+                await query.edit_message_text(
+                    text=chunks[0], reply_markup=get_topic_shortcuts_keyboard()
+                )
+            else:
+                # חלק ראשון מחליף את הודעת "מחפש מידע..."
+                await query.edit_message_text(text=chunks[0])
+                chat_id = query.message.chat_id
+                # חלקים אמצעיים
+                for chunk in chunks[1:-1]:
+                    await context.bot.send_message(chat_id=chat_id, text=chunk)
+                # חלק אחרון מקבל את הכפתורים
                 await context.bot.send_message(
                     chat_id=chat_id, text=chunks[-1],
                     reply_markup=get_topic_shortcuts_keyboard()
-                )
-            else:
-                await query.edit_message_text(
-                    text=chunks[0], reply_markup=get_topic_shortcuts_keyboard()
                 )
             _commit_to_history(context, shortcut_question, bot_response)
         else:
