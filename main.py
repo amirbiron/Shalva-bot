@@ -17,6 +17,10 @@ from usage_tracker import increment_and_check_usage, ALERT_THRESHOLD
 from telegram_alerter import send_telegram_alert
 from telegram.error import Conflict
 from activity_reporter import create_reporter
+from mental_health_navigator import (
+    start_navigator, handle_navigator_callback, create_navigator_conversation,
+    get_navigator_main_menu
+)
 
 
 # -----------------------------
@@ -159,6 +163,7 @@ MAIN_MENU_BUTTONS = [
     "🗣️ פריקה חופשית", "📈 גרפים והיסטוריה",
     "🎵 שירים מרגיעים", "💡 עזרה כללית",
     "💬 זקוק/ה לאוזן קשבת", "🔴 אני במצוקה", "⚙️ הגדרות",
+    "🧠 נווט בריאות הנפש",
     "🏠 התחלה / איפוס"
 ]
 MAIN_MENU_REGEX = "^(" + "|".join(MAIN_MENU_BUTTONS) + ")$"
@@ -170,7 +175,8 @@ def get_main_keyboard():
         [KeyboardButton("⚡ דיווח מהיר"), KeyboardButton("🔍 דיווח מלא")],
         [KeyboardButton("🗣️ פריקה חופשית"), KeyboardButton("📈 גרפים והיסטוריה")],
         [KeyboardButton("🎵 שירים מרגיעים"), KeyboardButton("💡 עזרה כללית")],
-        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("🔴 אני במצוקה"), KeyboardButton("⚙️ הגדרות")]
+        [KeyboardButton("💬 זקוק/ה לאוזן קשבת"), KeyboardButton("🔴 אני במצוקה"), KeyboardButton("⚙️ הגדרות")],
+        [KeyboardButton("🧠 נווט בריאות הנפש")]
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
@@ -273,6 +279,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🤖 שיחה עם AI אמפטי ומכיל להכלה והרגעה
 📈 מבט על הדרך - לראות איך אתה מתקדם
 💡 כלים לעזרה - טכניקות שיכולות להרגיע
+🧠 נווט בריאות הנפש - מידע על שירותים, זכויות ועלויות בישראל
 
 🔒 הכל נשאר רק אצלך ופרטי לחלוטין.
 
@@ -340,6 +347,13 @@ async def handle_general_message(update: Update, context: ContextTypes.DEFAULT_T
         keyboard = [[InlineKeyboardButton("לחץ כאן להתחלת תרגול", callback_data='start_panic_flow')]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.message.reply_text('כדי להתחיל, אנא לחץ על הכפתור:', reply_markup=reply_markup)
+    elif text == "🧠 נווט בריאות הנפש":
+        keyboard = [[InlineKeyboardButton("לחץ כאן לכניסה לנווט", callback_data='mh_main')]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(
+            '🧠 נווט בריאות הנפש - מידע מקיף על שירותי בריאות הנפש בישראל\n\nלחץ על הכפתור להתחלה:',
+            reply_markup=reply_markup
+        )
     else:
         await update.message.reply_text(
             "בחר אפשרות מהתפריט למטה:",
@@ -876,6 +890,11 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await show_reminder_settings(query, context)
     elif data == "confirm_reset":
         await reset_user_data(query, context)
+    # נווט בריאות הנפש
+    elif data == "mh_main" or data.startswith("mh_"):
+        # mh_ask_ai is handled by ConversationHandler, skip it here
+        if data != "mh_ask_ai":
+            await handle_navigator_callback(query, context, data, GEMINI_API_KEY)
 
 # =================================================================
 # פונקציות עזר ותצוגה
@@ -2008,6 +2027,7 @@ def main():
         # 1. הוספת ConversationHandlers - הם מקבלים עדיפות ראשונה
         application.add_handler(create_support_conversation())
         application.add_handler(panic_conv_handler)
+        application.add_handler(create_navigator_conversation(MAIN_MENU_REGEX))
         application.add_handler(create_quick_report_conversation())
         application.add_handler(create_full_report_conversation())
         application.add_handler(create_venting_conversation())
