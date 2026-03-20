@@ -542,5 +542,7 @@ def reset_data():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.getenv("WEBAPP_PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    # Render sets PORT env var automatically; fallback to WEBAPP_PORT or 5000
+    port = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", 5000)))
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug)
