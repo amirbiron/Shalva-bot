@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#111428">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>שלווה — תמיכה נפשית</title>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/design-system.css">
+</head>
+<body>
+
+<div class="app-container">
+
+  <!-- ==================== HEADER ==================== -->
+  <div class="app-header">
+    <h1><span class="brand-shalva">שלווה</span> <span class="brand-bot">— תמיכה נפשית</span></h1>
+  </div>
+
+  <!-- ==================== CONTENT ==================== -->
+  <div class="app-content" id="appContent">
+
+    <!-- ===== HOME SCREEN ===== -->
+    <div class="screen active" id="screen-home">
+      <div style="text-align:center; margin-bottom:1rem;">
+        <div style="font-size:1.1rem; font-weight:600;">🤗 שלום!</div>
+        <div class="text-secondary text-sm" style="margin-top:0.25rem;">אני כאן כדי לעזור לך</div>
+      </div>
+
+      <!-- Stats -->
+      <div class="gap-grid mb-2" id="homeStats">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--sf-primary-bg);color:var(--sf-primary);">📊</div>
+          <div class="stat-number" id="statAvg">—</div>
+          <div class="stat-label">ממוצע חרדה</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:var(--sf-teal-bg);color:var(--sf-teal);">📝</div>
+          <div class="stat-number" id="statTotal">0</div>
+          <div class="stat-label">סה"כ דיווחים</div>
+        </div>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="section-title">פעולות מהירות</div>
+      <div class="feature-grid">
+        <div class="feature-card" onclick="showScreen('screen-quick-report')">
+          <div class="feat-icon" style="background:var(--sf-amber-bg);color:var(--sf-amber);">⚡</div>
+          <div class="feat-title">דיווח מהיר</div>
+          <div class="feat-desc">2 שלבים בלבד</div>
+        </div>
+        <div class="feature-card" onclick="showScreen('screen-full-report')">
+          <div class="feat-icon" style="background:var(--sf-blue-bg);color:var(--sf-blue);">🔍</div>
+          <div class="feat-title">דיווח מלא</div>
+          <div class="feat-desc">ניתוח מעמיק</div>
+        </div>
+        <div class="feature-card" onclick="showScreen('screen-venting')">
+          <div class="feat-icon" style="background:var(--sf-green-bg);color:var(--sf-green);">🗣️</div>
+          <div class="feat-title">פריקה חופשית</div>
+          <div class="feat-desc">מקום בטוח</div>
+        </div>
+        <div class="feature-card" onclick="showScreen('screen-music')">
+          <div class="feat-icon" style="background:var(--sf-pink-bg);color:var(--sf-pink);">🎵</div>
+          <div class="feat-title">שירים מרגיעים</div>
+          <div class="feat-desc">מוכחים מחקרית</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== QUICK REPORT ===== -->
+    <div class="screen" id="screen-quick-report">
+      <button class="back-btn" onclick="showScreen('screen-home')">→ חזרה</button>
+      <div class="section-title">⚡ דיווח מהיר</div>
+
+      <div class="step-indicator" id="qrSteps">
+        <div class="step-bar active"></div>
+        <div class="step-bar"></div>
+      </div>
+
+      <!-- Step 1: Description -->
+      <div id="qrStep1">
+        <div class="form-group">
+          <label class="form-label">מה קורה עכשיו? <span class="required">*</span></label>
+          <textarea class="textarea" id="qrDescription" placeholder="תאר בקצרה את המצב..."></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="qrNextStep()">המשך →</button>
+      </div>
+
+      <!-- Step 2: Anxiety Level -->
+      <div id="qrStep2" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">באיזה רמת חרדה? (1-10)</label>
+          <div class="option-grid" id="qrAnxietyGrid"></div>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div id="qrResult" style="display:none;">
+        <div class="alert alert-success" id="qrResultMsg"></div>
+        <button class="btn btn-primary btn-block mt-1" onclick="showScreen('screen-home')">חזרה לדף הבית</button>
+      </div>
+    </div>
+
+    <!-- ===== FULL REPORT ===== -->
+    <div class="screen" id="screen-full-report">
+      <button class="back-btn" onclick="showScreen('screen-home')">→ חזרה</button>
+      <div class="section-title">🔍 דיווח מלא</div>
+
+      <div class="step-indicator" id="frSteps">
+        <div class="step-bar active"></div>
+        <div class="step-bar"></div>
+        <div class="step-bar"></div>
+        <div class="step-bar"></div>
+        <div class="step-bar"></div>
+      </div>
+
+      <div id="frStep1">
+        <div class="form-group">
+          <label class="form-label">מה גורם לחרדה עכשיו? <span class="required">*</span></label>
+          <textarea class="textarea" id="frDescription" placeholder="תאר במפורט..."></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="frNext(2)">המשך →</button>
+      </div>
+
+      <div id="frStep2" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">רמת חרדה (1-10)</label>
+          <div class="option-grid" id="frAnxietyGrid"></div>
+        </div>
+      </div>
+
+      <div id="frStep3" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">איפה זה קרה?</label>
+          <div class="option-list" id="frLocationGrid"></div>
+        </div>
+      </div>
+
+      <div id="frStep4" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">מי היה בסביבה?</label>
+          <div class="option-list" id="frPeopleGrid"></div>
+        </div>
+      </div>
+
+      <div id="frStep5" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">מזג אוויר</label>
+          <div class="option-list" id="frWeatherGrid"></div>
+        </div>
+      </div>
+
+      <div id="frResult" style="display:none;">
+        <div class="alert alert-success" id="frResultMsg"></div>
+        <button class="btn btn-primary btn-block mt-1" onclick="showScreen('screen-home')">חזרה לדף הבית</button>
+      </div>
+    </div>
+
+    <!-- ===== VENTING ===== -->
+    <div class="screen" id="screen-venting">
+      <button class="back-btn" onclick="showScreen('screen-home')">→ חזרה</button>
+      <div class="section-title">🗣️ פריקה חופשית</div>
+      <p class="text-secondary text-sm mb-1">כתוב כל מה שאתה מרגיש. אין שאלות, אין לחץ. רק תן לזה לצאת...</p>
+
+      <div id="ventingForm">
+        <div class="form-group">
+          <textarea class="textarea" id="ventingContent" placeholder="אני כאן בשבילך..." style="min-height:150px;"></textarea>
+        </div>
+        <button class="btn btn-primary btn-block" onclick="submitVenting()">שלח</button>
+      </div>
+
+      <div id="ventingSaveChoice" style="display:none;">
+        <div class="alert alert-success">💝 תודה שחלקת. זה דורש אומץ.</div>
+        <p class="text-secondary text-sm mt-1 mb-1">לשמור לניתוח עתידי?</p>
+        <div style="display:flex;gap:0.5rem;">
+          <button class="btn btn-primary" style="flex:1;" onclick="saveVenting(true)">💾 כן, שמור</button>
+          <button class="btn btn-ghost" style="flex:1;" onclick="saveVenting(false)">🗑️ לא, רק פריקה</button>
+        </div>
+      </div>
+
+      <div id="ventingDone" style="display:none;">
+        <div class="alert alert-success" id="ventingDoneMsg"></div>
+        <button class="btn btn-primary btn-block mt-1" onclick="resetVenting(); showScreen('screen-home')">חזרה לדף הבית</button>
+      </div>
+    </div>
+
+    <!-- ===== AI CHAT ===== -->
+    <div class="screen" id="screen-chat" style="height:100%;display:none;">
+      <div class="chat-container">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+          <button class="back-btn" onclick="endChat()" style="margin:0;">→ סיום שיחה</button>
+          <span class="badge badge-teal">💬 אוזן קשבת</span>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="typing-indicator" id="chatTyping">מקליד...</div>
+        <div class="chat-input-bar">
+          <input class="input-field" id="chatInput" placeholder="כתוב כאן..." onkeydown="if(event.key==='Enter')sendChatMessage()">
+          <button class="btn btn-primary" onclick="sendChatMessage()">שלח</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PANIC MODE ===== -->
+    <div class="screen" id="screen-panic">
+      <div class="panic-header">
+        <div style="font-size:2rem;">🔴</div>
+        <div style="font-size:1.1rem;font-weight:600;margin-top:0.5rem;">אני איתך. ❤️</div>
+        <div class="text-secondary text-sm">בוא ננשום יחד</div>
+      </div>
+
+      <div id="panicMain">
+        <div class="breathing-circle" id="breathCircle">
+          <span id="breathText">מוכן?</span>
+        </div>
+
+        <div style="text-align:center;margin:1rem 0;">
+          <button class="btn btn-primary btn-lg" id="breathBtn" onclick="startBreathing()">ננשום יחד 4-4-6</button>
+        </div>
+
+        <div class="section-title mt-2">טכניקות נוספות</div>
+        <div id="techniquesList">
+          <div class="technique-card" onclick="startTechnique('water')">
+            <div class="technique-icon" style="background:var(--sf-blue-bg);color:var(--sf-blue);">💧</div>
+            <div><div class="feat-title">שטיפת פנים</div><div class="feat-desc">מים קרים על הפנים</div></div>
+          </div>
+          <div class="technique-card" onclick="startTechnique('count')">
+            <div class="technique-icon" style="background:var(--sf-amber-bg);color:var(--sf-amber);">🔢</div>
+            <div><div class="feat-title">ספירה לאחור</div><div class="feat-desc">מ-100 בקפיצות של 7</div></div>
+          </div>
+          <div class="technique-card" onclick="startTechnique('press')">
+            <div class="technique-icon" style="background:var(--sf-orange-bg);color:var(--sf-orange);">🤚</div>
+            <div><div class="feat-title">לחיצה על כף היד</div><div class="feat-desc">בין האגודל לאצבע</div></div>
+          </div>
+          <div class="technique-card" onclick="startTechnique('move')">
+            <div class="technique-icon" style="background:var(--sf-green-bg);color:var(--sf-green);">🚶</div>
+            <div><div class="feat-title">תזוזה</div><div class="feat-desc">קום וזוז קצת</div></div>
+          </div>
+          <div class="technique-card" onclick="startTechnique('bodyscan')">
+            <div class="technique-icon" style="background:var(--sf-teal-bg);color:var(--sf-teal);">🧘</div>
+            <div><div class="feat-title">סריקת גוף</div><div class="feat-desc">Body Scan מודרך</div></div>
+          </div>
+          <div class="technique-card" onclick="startTechnique('pmr')">
+            <div class="technique-icon" style="background:var(--sf-pink-bg);color:var(--sf-pink);">💪</div>
+            <div><div class="feat-title">הרפיית שרירים</div><div class="feat-desc">PMR מודרך</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Guided exercise area (replaces main) -->
+      <div id="panicGuided" style="display:none;">
+        <div class="text-center mb-1" id="guidedTitle"></div>
+        <div id="guidedSteps"></div>
+        <div class="text-center mt-1">
+          <button class="btn btn-ghost" onclick="stopGuided()">⏹️ הפסק</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== ANALYTICS ===== -->
+    <div class="screen" id="screen-analytics">
+      <div class="section-title">📈 גרפים והיסטוריה</div>
+      <div id="analyticsContent">
+        <div class="text-center text-muted" style="padding:2rem;">טוען...</div>
+      </div>
+    </div>
+
+    <!-- ===== MUSIC ===== -->
+    <div class="screen" id="screen-music">
+      <button class="back-btn" onclick="showScreen('screen-home')">→ חזרה</button>
+      <div class="section-title">🎵 שירים מרגיעים</div>
+      <p class="text-secondary text-sm mb-1">מוכחים מחקרית להפחתת סטרס</p>
+
+      <div class="music-card">
+        <div class="music-icon">🎼</div>
+        <div class="music-info">
+          <div class="music-title">Weightless</div>
+          <div class="music-artist">Marconi Union ⭐ הכי מרגיע!</div>
+          <div class="music-links">
+            <a href="https://youtu.be/UfcAVejslrU" target="_blank">🎧 יוטיוב</a>
+            <a href="https://open.spotify.com/track/6kkwzB6hXLIONkEk9JciA6" target="_blank">🎶 ספוטיפיי</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="music-card">
+        <div class="music-icon">🎼</div>
+        <div class="music-info">
+          <div class="music-title">Watermark</div>
+          <div class="music-artist">Enya</div>
+          <div class="music-links">
+            <a href="https://youtu.be/0IKvdaXZP8Q" target="_blank">🎧 יוטיוב</a>
+            <a href="https://open.spotify.com/track/2m8MwTvNHBYIqieOoQeyuY" target="_blank">🎶 ספוטיפיי</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="music-card">
+        <div class="music-icon">🎼</div>
+        <div class="music-info">
+          <div class="music-title">Strawberry Swing</div>
+          <div class="music-artist">Coldplay</div>
+          <div class="music-links">
+            <a href="https://youtu.be/h3pJZSTQqIg" target="_blank">🎧 יוטיוב</a>
+            <a href="https://open.spotify.com/track/0zVYSaFo1b2v8YDmx0QYEh" target="_blank">🎶 ספוטיפיי</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="music-card">
+        <div class="music-icon">🎼</div>
+        <div class="music-info">
+          <div class="music-title">Claire de Lune</div>
+          <div class="music-artist">Claude Debussy</div>
+          <div class="music-links">
+            <a href="https://youtu.be/CvFH_6DNRCY" target="_blank">🎧 יוטיוב</a>
+            <a href="https://open.spotify.com/track/5u5aVJKjSMJr4zesMPz7bL" target="_blank">🎶 ספוטיפיי</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="music-card">
+        <div class="music-icon">🎼</div>
+        <div class="music-info">
+          <div class="music-title">Aqueous Transmission</div>
+          <div class="music-artist">Incubus</div>
+          <div class="music-links">
+            <a href="https://youtu.be/_ndHqJ3RP5Y" target="_blank">🎧 יוטיוב</a>
+            <a href="https://open.spotify.com/track/5M67k54BVUDADZPryaqV1y" target="_blank">🎶 ספוטיפיי</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert mt-1">
+        💡 טיפים: האזן עם אוזניות, נשום עמוק, סגור עיניים. 8-10 דקות מספיקות.
+      </div>
+    </div>
+
+    <!-- ===== NAVIGATOR ===== -->
+    <div class="screen" id="screen-navigator" style="height:100%;display:none;">
+      <div class="chat-container">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+          <button class="back-btn" onclick="endNavigator()" style="margin:0;">→ סיום</button>
+          <span class="badge badge-primary">🧠 נווט בריאות הנפש</span>
+        </div>
+        <div class="chat-messages" id="navMessages"></div>
+        <div class="topic-grid" id="navTopics">
+          <button class="topic-btn" onclick="sendNavTopic('hotlines')">📞 קווי חירום</button>
+          <button class="topic-btn" onclick="sendNavTopic('kupat')">🏥 טיפול בקופה</button>
+          <button class="topic-btn" onclick="sendNavTopic('types')">💊 סוגי טיפולים</button>
+          <button class="topic-btn" onclick="sendNavTopic('costs')">💰 עלויות</button>
+          <button class="topic-btn" onclick="sendNavTopic('workplace')">🏢 זכויות בעבודה</button>
+          <button class="topic-btn" onclick="sendNavTopic('ptsd')">🎗️ PTSD וטראומה</button>
+        </div>
+        <div class="typing-indicator" id="navTyping">מחפש מידע...</div>
+        <div class="chat-input-bar">
+          <input class="input-field" id="navInput" placeholder="שאל שאלה חופשית..." onkeydown="if(event.key==='Enter')sendNavMessage()">
+          <button class="btn btn-primary" onclick="sendNavMessage()">שלח</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== HELP ===== -->
+    <div class="screen" id="screen-help">
+      <button class="back-btn" onclick="showScreen('screen-more')">→ חזרה</button>
+      <div class="section-title">💡 עזרה כללית</div>
+
+      <div class="card mb-1">
+        <div style="font-weight:600;margin-bottom:0.5rem;">🫁 טכניקות נשימה</div>
+        <div class="text-sm text-secondary">
+          • נשימה 4-4-6: שאף 4 שניות, עצור 4, נשוף 6<br>
+          • נשימה עמוקה מהבטן<br>
+          • נשימת קופסא: 4-4-4-4
+        </div>
+      </div>
+
+      <div class="card mb-1">
+        <div style="font-weight:600;margin-bottom:0.5rem;">🧘‍♂️ הרגעה מיידית</div>
+        <div class="text-sm text-secondary">
+          • 5-4-3-2-1: 5 דברים שרואה, 4 שומע, 3 מרגיש, 2 מריח, 1 טועם<br>
+          • "זה רגש, לא עובדה. זה יעבור"<br>
+          • ספירה לאחור מ-100 בקפיצות של 7
+        </div>
+      </div>
+
+      <div class="card mb-1">
+        <div style="font-weight:600;margin-bottom:0.5rem;">💪 פעולות פיזיות</div>
+        <div class="text-sm text-secondary">
+          • קום וזוז<br>
+          • שתה מים קרים לאט<br>
+          • שטוף פנים במים קרים<br>
+          • לחץ בין האגודל לאצבע
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:0.5rem;">📞 עזרה מקצועית 24/7</div>
+        <div class="text-sm text-secondary">
+          • ער"ן — עזרה רגשית: 1201<br>
+          • סה"ר — צ'אט: sahar.org.il<br>
+          • נט"ל — חירום נפשי: 1800-363-363<br>
+          • קו לחיים: *2784
+        </div>
+      </div>
+
+      <div class="alert alert-warning mt-1">⚠️ הבוט לא מחליף טיפול מקצועי!</div>
+    </div>
+
+    <!-- ===== MORE (settings, etc.) ===== -->
+    <div class="screen" id="screen-more">
+      <div class="section-title">עוד</div>
+
+      <div style="font-size:0.8rem;font-weight:600;color:var(--sf-teal);margin-bottom:0.5rem;">כלים</div>
+      <div class="feature-grid mb-2">
+        <div class="feature-card" onclick="showScreen('screen-help')">
+          <div class="feat-icon" style="background:var(--sf-amber-bg);color:var(--sf-amber);">💡</div>
+          <div class="feat-title">עזרה כללית</div>
+          <div class="feat-desc">טכניקות וטיפים</div>
+        </div>
+        <div class="feature-card" onclick="startNavigator()">
+          <div class="feat-icon" style="background:var(--sf-pink-bg);color:var(--sf-pink);">🧠</div>
+          <div class="feat-title">נווט בריאות הנפש</div>
+          <div class="feat-desc">AI מומחה</div>
+        </div>
+        <div class="feature-card" onclick="showScreen('screen-music')">
+          <div class="feat-icon" style="background:var(--sf-primary-bg);color:var(--sf-primary);">🎵</div>
+          <div class="feat-title">מוזיקה</div>
+          <div class="feat-desc">שירים מרגיעים</div>
+        </div>
+        <div class="feature-card" onclick="showScreen('screen-venting')">
+          <div class="feat-icon" style="background:var(--sf-green-bg);color:var(--sf-green);">🗣️</div>
+          <div class="feat-title">פריקה חופשית</div>
+          <div class="feat-desc">מקום בטוח</div>
+        </div>
+      </div>
+
+      <div style="font-size:0.8rem;font-weight:600;color:var(--sf-teal);margin-bottom:0.5rem;">הגדרות</div>
+      <div class="settings-item" onclick="showScreen('screen-settings')">
+        <span class="settings-icon">⚙️</span>
+        <span class="settings-label">הגדרות</span>
+        <span class="settings-arrow">‹</span>
+      </div>
+
+      <div class="alert mt-2" style="font-size:0.75rem;">
+        📞 לכל תקלה או ביקורת: @moominAmir בטלגרם<br>
+        💚 בוט מומלץ נוסף: <a href="https://t.me/taaselitovbot" target="_blank" style="color:var(--sf-teal);">taaselitovbot</a>
+      </div>
+    </div>
+
+    <!-- ===== SETTINGS ===== -->
+    <div class="screen" id="screen-settings">
+      <button class="back-btn" onclick="showScreen('screen-more')">→ חזרה</button>
+      <div class="section-title">⚙️ הגדרות</div>
+
+      <div class="settings-item" id="settingsReminder">
+        <span class="settings-icon">🔔</span>
+        <span class="settings-label">תזכורת יומית</span>
+        <div class="toggle" id="reminderToggle" onclick="toggleReminder()"></div>
+      </div>
+
+      <div class="settings-item" onclick="exportData()">
+        <span class="settings-icon">📊</span>
+        <span class="settings-label">ייצוא נתונים</span>
+        <span class="settings-arrow">‹</span>
+      </div>
+
+      <div class="settings-item" onclick="confirmReset()">
+        <span class="settings-icon">🗑️</span>
+        <span class="settings-label" style="color:var(--sf-red);">איפוס נתונים</span>
+        <span class="settings-arrow">‹</span>
+      </div>
+    </div>
+
+  </div><!-- /app-content -->
+
+  <!-- ==================== BOTTOM NAV ==================== -->
+  <div class="bottom-nav">
+    <div class="nav-item" data-screen="screen-more" onclick="navTo('screen-more')">
+      <div class="nav-icon">⋯</div>עוד
+    </div>
+    <div class="nav-item" data-screen="screen-chat" onclick="startChat()">
+      <div class="nav-icon">💬</div>צ'אט
+    </div>
+    <button class="nav-fab" onclick="navTo('screen-panic')">🆘</button>
+    <div class="nav-item" data-screen="screen-analytics" onclick="navTo('screen-analytics')">
+      <div class="nav-icon">📈</div>נתונים
+    </div>
+    <div class="nav-item active" data-screen="screen-home" onclick="navTo('screen-home')">
+      <div class="nav-icon">🏠</div>בית
+    </div>
+  </div>
+
+</div><!-- /app-container -->
+
+<script src="/static/js/app.js"></script>
+
+</body>
+</html>
