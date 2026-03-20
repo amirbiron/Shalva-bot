@@ -1603,7 +1603,11 @@ async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer()
     
-    for key in ['breathing_task', 'guided_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
+    for key in ['breathing_task', 'guided_task']:
+        task = context.user_data.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+    for key in ['scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
 
     keyboard = [
@@ -1915,7 +1919,11 @@ async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return OFFER_EXTRA
 
 async def fallback_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    for key in ['breathing_task', 'guided_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
+    for key in ['breathing_task', 'guided_task']:
+        task = context.user_data.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+    for key in ['scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
     await start(update, context)
     return ConversationHandler.END
@@ -1928,7 +1936,11 @@ async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     except Exception as e:
         logger.warning(f"Could not edit message on exit_panic: {e}")
     
-    for key in ['breathing_task', 'guided_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
+    for key in ['breathing_task', 'guided_task']:
+        task = context.user_data.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+    for key in ['scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
     return ConversationHandler.END
 
