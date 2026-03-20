@@ -1,5 +1,4 @@
 import logging
-import sqlite3
 import os
 import json
 from datetime import datetime, timedelta
@@ -73,62 +72,80 @@ EXTRA_TECHNIQUES = {
 }
 
 # הגדרת בסיס הנתונים
-def init_database():
-    """יצירת טבלאות בסיס הנתונים"""
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    
-    # טבלת דיווחי חרדה
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS anxiety_reports (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        timestamp TEXT,
-        anxiety_level INTEGER,
-        description TEXT,
-        location TEXT,
-        people_around TEXT,
-        weather TEXT,
-        report_type TEXT DEFAULT 'full',
-        created_at TEXT DEFAULT (datetime('now'))
-    )
-    ''')
-    
-    # טבלת פריקות חופשיות
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS free_venting (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        content TEXT,
-        save_for_analysis BOOLEAN DEFAULT FALSE,
-        timestamp TEXT DEFAULT (datetime('now'))
-    )
-    ''')
-    
-    # טבלת הגדרות משתמש
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS user_settings (
-        user_id INTEGER PRIMARY KEY,
-        daily_reminder BOOLEAN DEFAULT FALSE,
-        reminder_time TEXT DEFAULT '20:00',
-        preferred_report_type TEXT DEFAULT 'quick',
-        notifications_enabled BOOLEAN DEFAULT TRUE,
-        language TEXT DEFAULT 'he'
-    )
-    ''')
-    
-    conn.commit()
-    conn.close()
-
-# --- הגדרת MongoDB למעקב משתמשים ---
+# --- הגדרת MongoDB ---
 try:
     client = pymongo.MongoClient(MONGO_URI)
     db = client.get_database("ShalvaBotDB")
     users_collection = db.get_collection("users")
+    reports_collection = db.get_collection("anxiety_reports")
+    venting_collection = db.get_collection("free_venting")
+    settings_collection = db.get_collection("user_settings")
     logger.info("Successfully connected to MongoDB.")
 except Exception as e:
     logger.error(f"Could not connect to MongoDB: {e}")
     exit()
+
+# --- MongoDB indexes ---
+reports_collection.create_index("user_id")
+venting_collection.create_index("user_id")
+settings_collection.create_index("user_id", unique=True)
+
+
+# --- פונקציות עזר ל-MongoDB ---
+
+def ensure_user_settings(user_id: int) -> dict:
+    """וידוא שקיימות הגדרות למשתמש, ויצירת ברירת מחדל אם לא."""
+    settings = settings_collection.find_one({"user_id": user_id})
+    if not settings:
+        default_settings = {
+            "user_id": user_id,
+            "daily_reminder": False,
+            "reminder_time": "20:00",
+            "preferred_report_type": "quick",
+            "notifications_enabled": True,
+            "language": "he",
+        }
+        settings_collection.insert_one(default_settings)
+        return default_settings
+    return settings
+
+
+def save_anxiety_report(user_id: int, timestamp: str, anxiety_level: int,
+                        description: str, report_type: str,
+                        location: str = None, people_around: str = None,
+                        weather: str = None):
+    """שמירת דיווח חרדה."""
+    reports_collection.insert_one({
+        "user_id": user_id,
+        "timestamp": timestamp,
+        "anxiety_level": anxiety_level,
+        "description": description,
+        "location": location,
+        "people_around": people_around,
+        "weather": weather,
+        "report_type": report_type,
+        "created_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    })
+
+
+def get_user_reports(user_id: int, limit: int = 30) -> list:
+    """שליפת דיווחי חרדה אחרונים."""
+    cursor = reports_collection.find(
+        {"user_id": user_id},
+        {"_id": 0, "anxiety_level": 1, "timestamp": 1, "location": 1,
+         "people_around": 1, "weather": 1, "report_type": 1, "description": 1}
+    ).sort("timestamp", -1).limit(limit)
+    return list(cursor)
+
+
+def save_venting(user_id: int, content: str, save_for_analysis: bool):
+    """שמירת פריקה חופשית."""
+    venting_collection.insert_one({
+        "user_id": user_id,
+        "content": content,
+        "save_for_analysis": save_for_analysis,
+        "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    })
 
 # --- פונקציית עזר לשמירת משתמש ---
 async def ensure_user_in_db(update: Update):
@@ -260,14 +277,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"Forcefully cleaned up a stuck navigator conversation for user {user_id}.")
     # ----------------------------------------------------
 
-    # בדיקה אם המשתמש קיים במערכת (הקוד הקיים שלך)
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM user_settings WHERE user_id = ?", (user_id,))
-    if not cursor.fetchone():
-        cursor.execute("INSERT INTO user_settings (user_id) VALUES (?)", (user_id,))
-        conn.commit()
-    conn.close()
+    # בדיקה אם המשתמש קיים במערכת
+    ensure_user_settings(user_id)
     
     welcome_message = """
 🤗 שלום ויפה שהגעת!
@@ -403,15 +414,8 @@ async def complete_quick_report(update: Update, context: ContextTypes.DEFAULT_TY
     user_id = query.from_user.id
     
     # שמירה בבסיס נתונים
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-    INSERT INTO anxiety_reports (user_id, timestamp, anxiety_level, description, report_type)
-    VALUES (?, ?, ?, ?, ?)
-    ''', (user_id, context.user_data['timestamp'], anxiety_level, 
-          context.user_data['description'], 'quick'))
-    conn.commit()
-    conn.close()
+    save_anxiety_report(user_id, context.user_data['timestamp'], anxiety_level,
+                        context.user_data['description'], 'quick')
     
     # המלצה חדשה בהתאם לרמה
     if anxiety_level >= 8:
@@ -540,16 +544,12 @@ async def complete_full_report(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = query.from_user.id
     
     # שמירה בבסיס נתונים
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-    INSERT INTO anxiety_reports (user_id, timestamp, anxiety_level, description, location, people_around, weather, report_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (user_id, context.user_data['timestamp'], context.user_data['anxiety_level'], 
-          context.user_data['description'], context.user_data['location'], 
-          context.user_data['people_around'], weather, 'full'))
-    conn.commit()
-    conn.close()
+    save_anxiety_report(user_id, context.user_data['timestamp'],
+                        context.user_data['anxiety_level'],
+                        context.user_data['description'], 'full',
+                        location=context.user_data['location'],
+                        people_around=context.user_data['people_around'],
+                        weather=weather)
     
     # ניתוח ומתן המלצות
     analysis = analyze_user_patterns(user_id)
@@ -633,14 +633,7 @@ async def save_venting_choice(update: Update, context: ContextTypes.DEFAULT_TYPE
     content = context.user_data['venting_content']
     
     # שמירה בבסיס נתונים
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-    INSERT INTO free_venting (user_id, content, save_for_analysis, timestamp)
-    VALUES (?, ?, ?, ?)
-    ''', (user_id, content, save_for_analysis, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-    conn.commit()
-    conn.close()
+    save_venting(user_id, content, save_for_analysis)
     
     if save_for_analysis:
         message = "✅ נשמר בהצלחה לניתוח!\n\n💡 הפריקה שלך תעזור לי להבין טוב יותר את הדפוסים שלך ולתת המלצות מותאמות."
@@ -914,28 +907,19 @@ def get_immediate_recommendation(anxiety_level):
 
 def analyze_user_patterns(user_id):
     """ניתוח דפוסים אישיים"""
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    
-    # משיכת נתונים של השבועיים האחרונים
     two_weeks_ago = (datetime.now() - timedelta(days=14)).strftime('%Y-%m-%d %H:%M:%S')
-    cursor.execute('''
-    SELECT anxiety_level, location, people_around, weather, timestamp 
-    FROM anxiety_reports 
-    WHERE user_id = ? AND timestamp > ?
-    ORDER BY timestamp DESC
-    ''', (user_id, two_weeks_ago))
-    
-    reports = cursor.fetchall()
-    conn.close()
-    
+    reports = list(reports_collection.find(
+        {"user_id": user_id, "timestamp": {"$gt": two_weeks_ago}},
+        {"_id": 0, "anxiety_level": 1, "location": 1, "people_around": 1, "weather": 1, "timestamp": 1}
+    ).sort("timestamp", -1))
+
     if len(reports) < 3:
         return "🔍 עדיין אוסף נתונים לניתוח דפוסים. המשך לדווח כדי לקבל תובנות מותאמות!"
-    
+
     # ניתוח פשוט
-    avg_anxiety = sum(report[0] for report in reports) / len(reports)
-    location_counter = Counter(report[1] for report in reports if report[1])
-    people_counter = Counter(report[2] for report in reports if report[2])
+    avg_anxiety = sum(r["anxiety_level"] for r in reports) / len(reports)
+    location_counter = Counter(r["location"] for r in reports if r.get("location"))
+    people_counter = Counter(r["people_around"] for r in reports if r.get("people_around"))
     
     analysis = f"הממוצע שלך בשבועיים האחרונים: {avg_anxiety:.1f}/10"
     
@@ -968,19 +952,11 @@ def get_personalized_recommendation(user_id, current_data):
 async def show_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """הצגת גרפים וניתוחים"""
     user_id = update.effective_user.id
-    
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-    SELECT anxiety_level, timestamp, location, people_around, report_type
-    FROM anxiety_reports 
-    WHERE user_id = ? 
-    ORDER BY timestamp DESC LIMIT 30
-    ''', (user_id,))
-    
-    reports = cursor.fetchall()
-    conn.close()
-    
+
+    reports_raw = get_user_reports(user_id, limit=30)
+    # המרה לטאפלים לתאימות עם הקוד הקיים
+    reports = [(r["anxiety_level"], r["timestamp"], r.get("location"), r.get("people_around"), r.get("report_type")) for r in reports_raw]
+
     if not reports:
         await update.message.reply_text(
             "📊 עדיין אין נתונים לניתוח\n\nהתחל לדווח כדי לראות דפוסים מעניינים על עצמך! 🎯", 
@@ -1057,18 +1033,9 @@ async def show_analytics(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def show_analytics_callback(query, context):
     """הצגת אנליטיקה מכפתור callback"""
     user_id = query.from_user.id
-    
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-    SELECT anxiety_level, timestamp, location, people_around, report_type
-    FROM anxiety_reports 
-    WHERE user_id = ? 
-    ORDER BY timestamp DESC LIMIT 30
-    ''', (user_id,))
-    
-    reports = cursor.fetchall()
-    conn.close()
+
+    reports_raw = get_user_reports(user_id, limit=30)
+    reports = [(r["anxiety_level"], r["timestamp"], r.get("location"), r.get("people_around"), r.get("report_type")) for r in reports_raw]
     
     if not reports:
         await query.edit_message_text(
@@ -1291,18 +1258,15 @@ async def handle_settings_callback(query, context):
 async def show_reminder_settings(query, context):
     """הגדרות תזכורות"""
     user_id = query.from_user.id
-    
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT daily_reminder, reminder_time FROM user_settings WHERE user_id = ?", (user_id,))
-    settings = cursor.fetchone()
-    conn.close()
-    
-    current_status = "מופעל" if settings[0] else "מופסק"
-    reminder_time = settings[1] if settings[1] else "20:00"
-    
+
+    settings = ensure_user_settings(user_id)
+    daily_reminder = settings.get("daily_reminder", False)
+    reminder_time = settings.get("reminder_time", "20:00")
+
+    current_status = "מופעל" if daily_reminder else "מופסק"
+
     keyboard = [
-        [InlineKeyboardButton(f"🔔 {'השבת' if settings[0] else 'הפעל'} תזכורות", 
+        [InlineKeyboardButton(f"🔔 {'השבת' if daily_reminder else 'הפעל'} תזכורות",
                             callback_data="reminder_toggle")],
         [InlineKeyboardButton("⏰ שנה שעה", callback_data="reminder_time")],
         [InlineKeyboardButton("🔙 חזור להגדרות", callback_data="show_settings_menu")]
@@ -1324,12 +1288,8 @@ async def show_report_type_settings(query, context):
     user_id = query.from_user.id
     
     try:
-        conn = sqlite3.connect('anxiety_data.db')
-        cursor = conn.cursor()
-        cursor.execute("SELECT preferred_report_type FROM user_settings WHERE user_id = ?", (user_id,))
-        result = cursor.fetchone()
-        current_type = result[0] if result else 'quick'
-        conn.close()
+        settings = ensure_user_settings(user_id)
+        current_type = settings.get("preferred_report_type", "quick")
         
         keyboard = [
             [InlineKeyboardButton(f"⚡ דיווח מהיר {'✓' if current_type == 'quick' else ''}", 
@@ -1361,51 +1321,42 @@ async def export_user_data(query, context):
     user_id = query.from_user.id
     
     try:
-        conn = sqlite3.connect('anxiety_data.db')
-        cursor = conn.cursor()
-        
         # שליפת דיווחי חרדה
-        cursor.execute('''
-        SELECT timestamp, anxiety_level, description, location, people_around, weather, report_type
-        FROM anxiety_reports WHERE user_id = ? ORDER BY timestamp DESC
-        ''', (user_id,))
-        anxiety_reports = cursor.fetchall()
-        
+        anxiety_reports = list(reports_collection.find(
+            {"user_id": user_id},
+            {"_id": 0, "timestamp": 1, "anxiety_level": 1, "description": 1,
+             "location": 1, "people_around": 1, "weather": 1, "report_type": 1}
+        ).sort("timestamp", -1))
+
         # שליפת פריקות חופשיות
-        cursor.execute('''
-        SELECT timestamp, content FROM free_venting 
-        WHERE user_id = ? AND save_for_analysis = 1 ORDER BY timestamp DESC
-        ''', (user_id,))
-        ventings = cursor.fetchall()
-        
-        conn.close()
-        
+        ventings = list(venting_collection.find(
+            {"user_id": user_id, "save_for_analysis": True},
+            {"_id": 0, "timestamp": 1, "content": 1}
+        ).sort("timestamp", -1))
+
         # יצירת קובץ JSON
         export_data = {
             "export_date": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "anxiety_reports": [
                 {
-                    "timestamp": report[0],
-                    "anxiety_level": report[1],
-                    "description": report[2],
-                    "location": report[3],
-                    "people_around": report[4],
-                    "weather": report[5],
-                    "report_type": report[6]
+                    "timestamp": r.get("timestamp"),
+                    "anxiety_level": r.get("anxiety_level"),
+                    "description": r.get("description"),
+                    "location": r.get("location"),
+                    "people_around": r.get("people_around"),
+                    "weather": r.get("weather"),
+                    "report_type": r.get("report_type"),
                 }
-                for report in anxiety_reports
+                for r in anxiety_reports
             ],
             "free_ventings": [
-                {
-                    "timestamp": venting[0],
-                    "content": venting[1]
-                }
-                for venting in ventings
+                {"timestamp": v.get("timestamp"), "content": v.get("content")}
+                for v in ventings
             ],
             "statistics": {
                 "total_reports": len(anxiety_reports),
                 "total_ventings": len(ventings),
-                "avg_anxiety_level": sum(r[1] for r in anxiety_reports) / len(anxiety_reports) if anxiety_reports else 0
+                "avg_anxiety_level": sum(r.get("anxiety_level", 0) for r in anxiety_reports) / len(anxiety_reports) if anxiety_reports else 0
             }
         }
         
@@ -1474,19 +1425,13 @@ async def reset_user_data(query, context):
     user_id = query.from_user.id
     
     try:
-        conn = sqlite3.connect('anxiety_data.db')
-        cursor = conn.cursor()
-        
         # מחיקת כל הנתונים
-        cursor.execute("DELETE FROM anxiety_reports WHERE user_id = ?", (user_id,))
-        cursor.execute("DELETE FROM free_venting WHERE user_id = ?", (user_id,))
-        cursor.execute("DELETE FROM user_settings WHERE user_id = ?", (user_id,))
-        
+        reports_collection.delete_many({"user_id": user_id})
+        venting_collection.delete_many({"user_id": user_id})
+        settings_collection.delete_one({"user_id": user_id})
+
         # יצירת הגדרות חדשות
-        cursor.execute("INSERT INTO user_settings (user_id) VALUES (?)", (user_id,))
-        
-        conn.commit()
-        conn.close()
+        ensure_user_settings(user_id)
         
         message = """
 ✅ הנתונים נמחקו בהצלחה!
@@ -1511,16 +1456,12 @@ async def toggle_reminders(query, context):
     """הפעלה/השבתה של תזכורות"""
     user_id = query.from_user.id
     
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT daily_reminder FROM user_settings WHERE user_id = ?", (user_id,))
-    current_status = cursor.fetchone()[0]
-    
+    settings = ensure_user_settings(user_id)
+    current_status = settings.get("daily_reminder", False)
+
     # החלפת הסטטוס
     new_status = not current_status
-    cursor.execute("UPDATE user_settings SET daily_reminder = ? WHERE user_id = ?", (new_status, user_id))
-    conn.commit()
-    conn.close()
+    settings_collection.update_one({"user_id": user_id}, {"$set": {"daily_reminder": new_status}})
     
     status_text = "הופעלו" if new_status else "הושבתו"
     
@@ -1542,11 +1483,7 @@ async def set_report_type(query, context):
     user_id = query.from_user.id
     report_type = query.data.split("_")[-1]  # quick או full
     
-    conn = sqlite3.connect('anxiety_data.db')
-    cursor = conn.cursor()
-    cursor.execute("UPDATE user_settings SET preferred_report_type = ? WHERE user_id = ?", (report_type, user_id))
-    conn.commit()
-    conn.close()
+    settings_collection.update_one({"user_id": user_id}, {"$set": {"preferred_report_type": report_type}})
     
     type_text = "דיווח מהיר" if report_type == "quick" else "דיווח מלא"
     
@@ -2147,8 +2084,7 @@ def main():
         print(f'Bot starting with OWNER_USER_ID: {OWNER_USER_ID}')
         print(f'BOT_TOKEN exists: {bool(BOT_TOKEN)}')
         print(f'MONGO_URI exists: {bool(MONGO_URI)}')
-        # יצירת בסיס נתונים
-        init_database()
+        # MongoDB מוכן (אינדקסים נוצרו בעת הטעינה)
         
         # יצירת האפליקציה
         application = Application.builder().token(BOT_TOKEN).build()
