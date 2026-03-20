@@ -95,18 +95,19 @@ settings_collection.create_index("user_id", unique=True)
 
 def ensure_user_settings(user_id: int) -> dict:
     """וידוא שקיימות הגדרות למשתמש, ויצירת ברירת מחדל אם לא."""
-    settings = settings_collection.find_one({"user_id": user_id})
-    if not settings:
-        default_settings = {
-            "user_id": user_id,
-            "daily_reminder": False,
-            "reminder_time": "20:00",
-            "preferred_report_type": "quick",
-            "notifications_enabled": True,
-            "language": "he",
-        }
-        settings_collection.insert_one(default_settings)
-        return default_settings
+    default_settings = {
+        "daily_reminder": False,
+        "reminder_time": "20:00",
+        "preferred_report_type": "quick",
+        "notifications_enabled": True,
+        "language": "he",
+    }
+    settings = settings_collection.find_one_and_update(
+        {"user_id": user_id},
+        {"$setOnInsert": {**default_settings, "user_id": user_id}},
+        upsert=True,
+        return_document=pymongo.ReturnDocument.AFTER,
+    )
     return settings
 
 
