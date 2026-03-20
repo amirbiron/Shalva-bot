@@ -11,6 +11,7 @@ import asyncio
 from datetime import datetime
 from functools import wraps  # עבור הדקורטור owner_only
 from google.api_core import exceptions
+from threading import Thread
 from dotenv import load_dotenv
 from usage_tracker import increment_and_check_usage, ALERT_THRESHOLD
 from telegram_alerter import send_telegram_alert
@@ -2074,6 +2075,22 @@ async def fix_mongo_nulls(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"נוקו {result.deleted_count + result2.deleted_count} רשומות שגויות")
 
 # =================================================================
+# Web App — הרצת Flask ברקע על thread נפרד
+# =================================================================
+
+def start_webapp():
+    """הפעלת הווב אפ של שלווה ב-thread ברקע."""
+    try:
+        from webapp.app import app as webapp_app
+        port = int(os.getenv("PORT", os.getenv("WEBAPP_PORT", 5000)))
+        logger.info(f"🌐 Web app starting on port {port}...")
+        print(f"🌐 Web app: http://0.0.0.0:{port}")
+        webapp_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    except Exception as e:
+        logger.error(f"Web app failed to start: {e}")
+        print(f"⚠️ Web app error: {e}")
+
+# =================================================================
 # Main Function
 # =================================================================
 
@@ -2085,7 +2102,11 @@ def main():
         print(f'BOT_TOKEN exists: {bool(BOT_TOKEN)}')
         print(f'MONGO_URI exists: {bool(MONGO_URI)}')
         # MongoDB מוכן (אינדקסים נוצרו בעת הטעינה)
-        
+
+        # --- הפעלת Web App ברקע ---
+        webapp_thread = Thread(target=start_webapp, daemon=True)
+        webapp_thread.start()
+
         # יצירת האפליקציה
         application = Application.builder().token(BOT_TOKEN).build()
         application.add_error_handler(error_handler)
