@@ -1590,7 +1590,8 @@ async def suggest_ai_chat_and_end(update: Update, context: ContextTypes.DEFAULT_
     final_text = (
         "נגמרו לי ההצעות במאגר, תמיד תוכל ללחוץ על לחצן המצוקה כדי להתחיל סבב נוסף.\n"
         "ממליץ לך בחום לעבור ללחצן \"זקוק/ה לאוזן קשבת?\", תוכל לנהל שיחה עם סוכן בינה מלאכותית אדיב, מכיל ואמפתי 🩵\n\n"
-        "💚 עוד המלצה: בוט מעולה לעזרה עם רגשות קשים: https://t.me/taaselitovbot"
+        "💚 עוד המלצה: בוט מעולה לעזרה עם רגשות קשים: https://t.me/taaselitovbot\n\n"
+        "💚 המלצה נוספת: אתר עם מתנדבים לשיחות נפשיות:\nhttps://heartalks.net/"
     )
     try:
         await query.edit_message_text(text=final_text)
