@@ -61,13 +61,15 @@ SUPPORT_ACTIVE = range(1)
 # -----------------------------------------------------------------
 # Panic feature global definitions (states and techniques)
 # -----------------------------------------------------------------
-(ASK_BREATH, BREATHING, ASK_WASH, ASK_SCALE, OFFER_EXTRA, EXEC_EXTRA) = range(100, 106)
+(ASK_BREATH, BREATHING, ASK_WASH, ASK_SCALE, OFFER_EXTRA, EXEC_EXTRA, GUIDED_EXERCISE) = range(100, 107)
 
 EXTRA_TECHNIQUES = {
     "count": ("🔹 ספירה לאחור מ-100 בקפיצות של 7", "נתחיל: 100… 93… 86… בהצלחה!"),
     "press": ("🔸 לחץ על כף היד בין האגודל לאצבע", "לחץ על הנקודה חצי דקה, ואז לחץ '✅ ביצעתי'"),
     "move": ("🚶 קום וזוז קצת – תזוזה משחררת מתח", "קום לזוז דקה-שתיים ואז לחץ '✅ ביצעתי'"),
     "drink": ("💧 שתה מים קרים לאט לאט", "שתה מים בלגימות קטנות ולחץ '✅ ביצעתי'"),
+    "bodyscan": ("🧘 סריקת גוף (Body Scan)", "guided"),
+    "pmr": ("💪 הרפיית שרירים הדרגתית (PMR)", "guided"),
 }
 
 # הגדרת בסיס הנתונים
@@ -1601,7 +1603,11 @@ async def panic_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     query = update.callback_query
     await query.answer()
     
-    for key in ['breathing_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
+    for key in ['breathing_task', 'guided_task']:
+        task = context.user_data.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+    for key in ['scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
 
     keyboard = [
@@ -1666,6 +1672,89 @@ async def breathing_cycle(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         if context.user_data.pop('breathing_task', None):
             await ask_scale_if_needed(chat_id, context)
 
+async def body_scan_cycle(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """תרגיל סריקת גוף מודרך – מכף הרגל ועד הראש."""
+    steps = [
+        ("🦶 כפות הרגליים", "הפנה את תשומת הלב לכפות הרגליים.\nמה אתה מרגיש? חום? קור? לחץ?\nפשוט שים לב, בלי לשפוט."),
+        ("🦵 השוקיים והברכיים", "עלה לאט לשוקיים ולברכיים.\nשחרר כל מתח שאתה מזהה באזור."),
+        ("🦿 הירכיים והאגן", "המשך לירכיים ולאגן.\nנשום עמוק פנימה ושחרר את האזור."),
+        ("🫁 הבטן והחזה", "הרגש את הבטן עולה ויורדת עם הנשימה.\nשים לב לחזה – שחרר כל מתח."),
+        ("💪 הכתפיים והזרועות", "הורד את הכתפיים מהאוזניים.\nהרגש את הזרועות, כפות הידיים, האצבעות."),
+        ("🧠 הצוואר, הפנים והראש", "שחרר את הלסת, הרפה את המצח.\nהרגש את כל הראש רגוע ומשוחרר."),
+    ]
+    try:
+        await context.bot.send_message(chat_id,
+            "🧘 *סריקת גוף (Body Scan)*\n\n"
+            "שב/י בנוח, עצום/מי עיניים.\n"
+            "נעבור יחד על הגוף מלמטה למעלה.\n"
+            "בכל אזור – פשוט שים/י לב לתחושות, בלי לשנות כלום.",
+            parse_mode="Markdown")
+        await asyncio.sleep(5)
+
+        for i, (area, instruction) in enumerate(steps):
+            if not context.user_data.get('guided_task'):
+                break
+            await context.bot.send_message(chat_id, f"שלב {i+1}/{len(steps)}: {area}\n\n{instruction}")
+            await asyncio.sleep(15)
+
+        if context.user_data.get('guided_task'):
+            await context.bot.send_message(chat_id,
+                "✨ סיימנו את סריקת הגוף.\n"
+                "קח/י רגע להרגיש את הגוף כולו – קל ומשוחרר.")
+    except asyncio.CancelledError:
+        logger.info(f"Body scan cycle for chat {chat_id} was cancelled.")
+        raise
+    except Exception as e:
+        logger.error(f"Error in body_scan_cycle for chat {chat_id}: {e}", exc_info=True)
+    finally:
+        if context.user_data.pop('guided_task', None):
+            await ask_scale_if_needed(chat_id, context)
+
+
+async def pmr_cycle(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """תרגיל הרפיית שרירים הדרגתית מודרך – כיווץ ושחרור."""
+    muscle_groups = [
+        ("✊ כפות הידיים", "כווץ/י אגרופים חזקים ככל שאפשר…", "שחרר/י… הרגש/י את ההבדל בין כיווץ לשחרור."),
+        ("💪 הזרועות", "כווץ/י את שרירי הזרועות, קרבו את האגרופים לכתפיים…", "שחרר/י… תנו לזרועות ליפול בכבדות."),
+        ("🫁 הכתפיים", "הרם/י את הכתפיים עד לאוזניים, חזק ככל שאפשר…", "הורד/י ושחרר/י… הרגש/י את הכתפיים נופלות."),
+        ("😤 הפנים", "כווץ/י את כל שרירי הפנים – מצח, עיניים, לסת…", "שחרר/י… הרפה/י את המצח, העיניים, הלסת."),
+        ("🫃 הבטן", "כווץ/י את שרירי הבטן חזק…", "שחרר/י… תנו לבטן להירגע לגמרי."),
+        ("🦵 הרגליים", "כווץ/י את שרירי הירכיים, השוקיים וכפות הרגליים…", "שחרר/י… הרגש/י את הרגליים כבדות ורגועות."),
+    ]
+    try:
+        await context.bot.send_message(chat_id,
+            "💪 *הרפיית שרירים הדרגתית (PMR)*\n\n"
+            "נעבור על קבוצות שרירים אחת-אחת.\n"
+            "בכל שלב: *כווץ חזק 5 שניות* ← *שחרר 10 שניות*.\n"
+            "ההבדל בין הכיווץ לשחרור הוא מה שמרגיע את הגוף.",
+            parse_mode="Markdown")
+        await asyncio.sleep(5)
+
+        for i, (area, tense_text, release_text) in enumerate(muscle_groups):
+            if not context.user_data.get('guided_task'):
+                break
+            await context.bot.send_message(chat_id, f"שלב {i+1}/{len(muscle_groups)}: {area}\n\n{tense_text}")
+            await asyncio.sleep(5)  # 5 שניות כיווץ
+            if not context.user_data.get('guided_task'):
+                break
+            await context.bot.send_message(chat_id, f"😮‍💨 {release_text}")
+            await asyncio.sleep(10)  # 10 שניות שחרור
+
+        if context.user_data.get('guided_task'):
+            await context.bot.send_message(chat_id,
+                "✨ סיימנו את התרגיל!\n"
+                "קח/י רגע להרגיש את הגוף כולו – רפוי ומשוחרר.\n"
+                "שים/י לב כמה ההרגשה שונה מלפני התרגיל.")
+    except asyncio.CancelledError:
+        logger.info(f"PMR cycle for chat {chat_id} was cancelled.")
+        raise
+    except Exception as e:
+        logger.error(f"Error in pmr_cycle for chat {chat_id}: {e}", exc_info=True)
+    finally:
+        if context.user_data.pop('guided_task', None):
+            await ask_scale_if_needed(chat_id, context)
+
+
 async def stop_breathing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -1681,6 +1770,24 @@ async def stop_breathing(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     await ask_scale_if_needed(update.effective_chat.id, context)
     return ASK_SCALE
+
+async def stop_guided(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """עצירת תרגיל מודרך (Body Scan / PMR)."""
+    query = update.callback_query
+    await query.answer()
+
+    task = context.user_data.get('guided_task')
+    if task:
+        task.cancel()
+
+    try:
+        await query.delete_message()
+    except Exception as e:
+        logger.warning(f"Could not delete message on stop_guided: {e}")
+
+    await ask_scale_if_needed(update.effective_chat.id, context)
+    return ASK_SCALE
+
 
 async def face_washed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -1767,7 +1874,22 @@ async def start_extra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     await query.answer()
     key = query.data.split("_")[2]
     _, intro = EXTRA_TECHNIQUES[key]
-    
+
+    # תרגילים מודרכים עם צעדים אוטומטיים
+    if intro == "guided":
+        cycle_func = body_scan_cycle if key == "bodyscan" else pmr_cycle
+        stop_button = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("⏹️ הפסק והמשך הלאה", callback_data="panic_stop_guided")]]
+        )
+        label = "סריקת גוף" if key == "bodyscan" else "הרפיית שרירים"
+        await query.edit_message_text(
+            f"מתחילים {label}…\nתוכל/י להפסיק את התרגיל בכל שלב.",
+            reply_markup=stop_button,
+        )
+        guided_task = asyncio.create_task(cycle_func(update.effective_chat.id, context))
+        context.user_data['guided_task'] = guided_task
+        return GUIDED_EXERCISE
+
     await query.edit_message_text(
         f"{intro}\nכשתסיים, לחץ על הכפתור.",
         reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ ביצעתי", callback_data="panic_done_extra")]])
@@ -1797,7 +1919,11 @@ async def extra_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return OFFER_EXTRA
 
 async def fallback_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    for key in ['breathing_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
+    for key in ['breathing_task', 'guided_task']:
+        task = context.user_data.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+    for key in ['scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
     await start(update, context)
     return ConversationHandler.END
@@ -1810,7 +1936,11 @@ async def exit_panic(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     except Exception as e:
         logger.warning(f"Could not edit message on exit_panic: {e}")
     
-    for key in ['breathing_task', 'scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
+    for key in ['breathing_task', 'guided_task']:
+        task = context.user_data.pop(key, None)
+        if task and not task.done():
+            task.cancel()
+    for key in ['scale_asked', 'offered_techniques', 'level_start', 'level_now', 'attempts']:
         context.user_data.pop(key, None)
     return ConversationHandler.END
 
@@ -1834,6 +1964,10 @@ panic_conv_handler = ConversationHandler(
             CallbackQueryHandler(suggest_ai_chat_and_end, pattern="^panic_skip_to_end$"),
         ],
         EXEC_EXTRA: [CallbackQueryHandler(extra_done, pattern="^panic_done_extra$")],
+        GUIDED_EXERCISE: [
+            CallbackQueryHandler(stop_guided, pattern="^panic_stop_guided$"),
+            CallbackQueryHandler(handle_scale, pattern="^panic_scale_"),
+        ],
     },
     fallbacks=[
         CommandHandler("start", fallback_start),
