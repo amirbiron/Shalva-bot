@@ -15,6 +15,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -33,9 +36,6 @@ if GEMINI_API_KEY:
 # ---------------------------------------------------------------------------
 app = Flask(__name__, static_folder="static", static_url_path="/static")
 app.secret_key = SECRET_KEY
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # MongoDB
