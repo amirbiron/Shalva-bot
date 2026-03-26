@@ -6,6 +6,7 @@ Flask backend serving the SPA and providing API endpoints.
 import os
 import json
 import logging
+import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
@@ -51,11 +52,12 @@ users_collection = db.get_collection("users")
 
 # In-memory chat sessions (keyed by session id)
 chat_sessions = {}
+_sessions_lock = threading.Lock()
 CHAT_SESSION_TTL = timedelta(hours=2)
 
 
 def _cleanup_stale_sessions():
-    """Remove chat sessions older than TTL."""
+    """Remove chat sessions older than TTL. Must be called with _sessions_lock held."""
     now = datetime.now()
     stale = [k for k, v in chat_sessions.items() if now - v.get("last_active", now) > CHAT_SESSION_TTL]
     for k in stale:
@@ -64,18 +66,9 @@ def _cleanup_stale_sessions():
 
 def _touch_session(key):
     """Update last_active timestamp for a session."""
-    if key in chat_sessions:
-        chat_sessions[key]["last_active"] = datetime.now()
-
-
-def get_user_id():
-    """Get or create a user identifier from the session."""
-    if "user_id" not in session:
-        # For web users, generate a unique numeric-ish ID based on session
-        import hashlib
-        sid = session.sid if hasattr(session, "sid") else str(id(session))
-        session["user_id"] = int(hashlib.sha256(sid.encode()).hexdigest()[:12], 16)
-    return session["user_id"]
+    with _sessions_lock:
+        if key in chat_sessions:
+            chat_sessions[key]["last_active"] = datetime.now()
 
 
 def ensure_user_settings(user_id: int) -> dict:
@@ -377,8 +370,9 @@ def chat_start():
         {"role": "user", "parts": [EMPATHY_PROMPT]},
         {"role": "model", "parts": [opening]},
     ]
-    _cleanup_stale_sessions()
-    chat_sessions[user_id] = {"model": model, "history": history, "type": "support", "last_active": datetime.now()}
+    with _sessions_lock:
+        _cleanup_stale_sessions()
+        chat_sessions[user_id] = {"model": model, "history": history, "type": "support", "last_active": datetime.now()}
     return jsonify({"ok": True, "message": opening})
 
 
@@ -420,8 +414,9 @@ def chat_message():
 @app.route("/api/chat/end", methods=["POST"])
 def chat_end():
     user_id = session.get("user_id")
-    if user_id and user_id in chat_sessions:
-        del chat_sessions[user_id]
+    if user_id:
+        with _sessions_lock:
+            chat_sessions.pop(user_id, None)
     return jsonify({"ok": True})
 
 
@@ -443,8 +438,9 @@ def navigator_start():
         "היי! אני סוכן AI שמתמחה בבריאות הנפש בישראל.\n"
         "אפשר לשאול אותי על זכויות, טיפולים, עלויות, קופות חולים, קווי חירום ועוד."
     )
-    _cleanup_stale_sessions()
-    chat_sessions[f"nav_{user_id}"] = {"model": model, "history": [], "type": "navigator", "last_active": datetime.now()}
+    with _sessions_lock:
+        _cleanup_stale_sessions()
+        chat_sessions[f"nav_{user_id}"] = {"model": model, "history": [], "type": "navigator", "last_active": datetime.now()}
     return jsonify({"ok": True, "message": opening})
 
 
@@ -487,9 +483,9 @@ def navigator_message():
 @app.route("/api/navigator/end", methods=["POST"])
 def navigator_end():
     user_id = session.get("user_id")
-    key = f"nav_{user_id}"
-    if key in chat_sessions:
-        del chat_sessions[key]
+    if user_id:
+        with _sessions_lock:
+            chat_sessions.pop(f"nav_{user_id}", None)
     return jsonify({"ok": True})
 
 

@@ -3,6 +3,15 @@
    =================================================== */
 
 // ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+function esc(str) {
+  const d = document.createElement("div");
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ---------------------------------------------------------------------------
 // API Helper
 // ---------------------------------------------------------------------------
 async function api(path, opts = {}) {
@@ -635,7 +644,7 @@ async function loadAnalytics() {
     if (data.location_stats.length) {
       html += `<div class="card mb-1"><div style="font-weight:600;margin-bottom:0.5rem;">📍 מיקומים</div>`;
       data.location_stats.forEach((l) => {
-        html += `<div class="text-sm text-secondary" style="margin-bottom:0.25rem;">${l.location}: ${l.count} פעמים — ממוצע ${l.avg_anxiety}</div>`;
+        html += `<div class="text-sm text-secondary" style="margin-bottom:0.25rem;">${esc(l.location)}: ${l.count} פעמים — ממוצע ${l.avg_anxiety}</div>`;
       });
       html += "</div>";
     }
@@ -644,7 +653,7 @@ async function loadAnalytics() {
     if (data.people_stats.length) {
       html += `<div class="card mb-1"><div style="font-weight:600;margin-bottom:0.5rem;">👥 מצבים חברתיים</div>`;
       data.people_stats.forEach((p) => {
-        html += `<div class="text-sm text-secondary" style="margin-bottom:0.25rem;">${p.people}: ${p.count} פעמים — ממוצע ${p.avg_anxiety}</div>`;
+        html += `<div class="text-sm text-secondary" style="margin-bottom:0.25rem;">${esc(p.people)}: ${p.count} פעמים — ממוצע ${p.avg_anxiety}</div>`;
       });
       html += "</div>";
     }
