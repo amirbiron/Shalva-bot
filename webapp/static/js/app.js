@@ -293,6 +293,50 @@ function resetVenting() {
 }
 
 // ---------------------------------------------------------------------------
+// Shared Chat Helpers
+// ---------------------------------------------------------------------------
+function addBubble(containerId, text, type) {
+  const el = document.createElement("div");
+  el.className = `chat-bubble ${type}`;
+  el.textContent = text;
+  const container = document.getElementById(containerId);
+  container.appendChild(el);
+  container.scrollTop = 999999;
+}
+
+function handleAiResponse(result, containerId) {
+  if (result.crisis) {
+    const el = document.createElement("div");
+    el.className = "crisis-alert";
+    el.textContent = result.message;
+    document.getElementById(containerId).appendChild(el);
+  } else if (result.message) {
+    addBubble(containerId, result.message, "bot");
+  } else if (result.error) {
+    addBubble(containerId, "מצטער, קרתה שגיאה. נסה שוב.", "bot");
+  }
+}
+
+async function sendAiMessage(apiPath, inputId, containerId, typingId) {
+  const input = document.getElementById(inputId);
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = "";
+
+  addBubble(containerId, msg, "user");
+  document.getElementById(typingId).classList.add("active");
+
+  try {
+    const result = await api(apiPath, { method: "POST", body: { message: msg } });
+    document.getElementById(typingId).classList.remove("active");
+    handleAiResponse(result, containerId);
+  } catch (e) {
+    document.getElementById(typingId).classList.remove("active");
+    addBubble(containerId, "שגיאת תקשורת. נסה שוב.", "bot");
+  }
+}
+
+// ---------------------------------------------------------------------------
 // AI Chat
 // ---------------------------------------------------------------------------
 async function startChat() {
@@ -300,42 +344,11 @@ async function startChat() {
   document.getElementById("chatMessages").innerHTML = "";
 
   const result = await api("/api/chat/start", { method: "POST" });
-  if (result.message) {
-    addChatBubble(result.message, "bot");
-  }
+  if (result.message) addBubble("chatMessages", result.message, "bot");
 }
 
-function addChatBubble(text, type) {
-  const el = document.createElement("div");
-  el.className = `chat-bubble ${type}`;
-  el.textContent = text;
-  document.getElementById("chatMessages").appendChild(el);
-  document.getElementById("chatMessages").scrollTop = 999999;
-}
-
-async function sendChatMessage() {
-  const input = document.getElementById("chatInput");
-  const msg = input.value.trim();
-  if (!msg) return;
-  input.value = "";
-
-  addChatBubble(msg, "user");
-  document.getElementById("chatTyping").classList.add("active");
-
-  try {
-    const result = await api("/api/chat/message", { method: "POST", body: { message: msg } });
-    document.getElementById("chatTyping").classList.remove("active");
-    if (result.crisis) {
-      const el = document.createElement("div");
-      el.className = "crisis-alert";
-      el.textContent = result.message;
-      document.getElementById("chatMessages").appendChild(el);
-    } else if (result.message) addChatBubble(result.message, "bot");
-    else if (result.error) addChatBubble("מצטער, קרתה שגיאה. נסה שוב.", "bot");
-  } catch (e) {
-    document.getElementById("chatTyping").classList.remove("active");
-    addChatBubble("שגיאת תקשורת. נסה שוב.", "bot");
-  }
+function sendChatMessage() {
+  sendAiMessage("/api/chat/message", "chatInput", "chatMessages", "chatTyping");
 }
 
 async function endChat() {
@@ -360,68 +373,27 @@ async function startNavigator() {
   document.getElementById("navMessages").innerHTML = "";
 
   const result = await api("/api/navigator/start", { method: "POST" });
-  if (result.message) addNavBubble(result.message, "bot");
-}
-
-function addNavBubble(text, type) {
-  const el = document.createElement("div");
-  el.className = `chat-bubble ${type}`;
-  el.textContent = text;
-  document.getElementById("navMessages").appendChild(el);
-  document.getElementById("navMessages").scrollTop = 999999;
+  if (result.message) addBubble("navMessages", result.message, "bot");
 }
 
 async function sendNavTopic(topic) {
   const question = navTopicQuestions[topic];
   if (!question) return;
-  addNavBubble(question, "user");
+  addBubble("navMessages", question, "user");
   document.getElementById("navTyping").classList.add("active");
 
   try {
     const result = await api("/api/navigator/message", { method: "POST", body: { message: question } });
     document.getElementById("navTyping").classList.remove("active");
-    if (result.crisis) {
-      const el = document.createElement("div");
-      el.className = "crisis-alert";
-      el.textContent = result.message;
-      document.getElementById("navMessages").appendChild(el);
-    } else if (result.message) {
-      addNavBubble(result.message, "bot");
-    } else if (result.error) {
-      addNavBubble("מצטער, קרתה שגיאה. נסה שוב.", "bot");
-    }
+    handleAiResponse(result, "navMessages");
   } catch (e) {
     document.getElementById("navTyping").classList.remove("active");
-    addNavBubble("שגיאת תקשורת. נסה שוב.", "bot");
+    addBubble("navMessages", "שגיאת תקשורת. נסה שוב.", "bot");
   }
 }
 
-async function sendNavMessage() {
-  const input = document.getElementById("navInput");
-  const msg = input.value.trim();
-  if (!msg) return;
-  input.value = "";
-
-  addNavBubble(msg, "user");
-  document.getElementById("navTyping").classList.add("active");
-
-  try {
-    const result = await api("/api/navigator/message", { method: "POST", body: { message: msg } });
-    document.getElementById("navTyping").classList.remove("active");
-    if (result.crisis) {
-      const el = document.createElement("div");
-      el.className = "crisis-alert";
-      el.textContent = result.message;
-      document.getElementById("navMessages").appendChild(el);
-    } else if (result.message) {
-      addNavBubble(result.message, "bot");
-    } else if (result.error) {
-      addNavBubble("מצטער, קרתה שגיאה. נסה שוב.", "bot");
-    }
-  } catch (e) {
-    document.getElementById("navTyping").classList.remove("active");
-    addNavBubble("שגיאת תקשורת. נסה שוב.", "bot");
-  }
+function sendNavMessage() {
+  sendAiMessage("/api/navigator/message", "navInput", "navMessages", "navTyping");
 }
 
 async function endNavigator() {

@@ -346,6 +346,40 @@ def venting():
 
 
 # ---------------------------------------------------------------------------
+# API: Shared AI Chat Helper
+# ---------------------------------------------------------------------------
+
+def _handle_ai_message(session_key, user_message):
+    """Shared logic for chat and navigator message endpoints.
+    Returns a Flask response tuple."""
+    # Crisis detection
+    if CRISIS_PATTERN.search(user_message):
+        return jsonify({"ok": True, "message": CRISIS_RESPONSE, "crisis": True})
+    if EMERGENCY_PATTERN.search(user_message):
+        return jsonify({"ok": True, "message": EMERGENCY_RESPONSE, "crisis": True})
+
+    with _sessions_lock:
+        sess = chat_sessions.get(session_key)
+        if not sess:
+            return jsonify({"error": "no active session"}), 400
+        model = sess["model"]
+        history = sess["history"]
+        sess["last_active"] = datetime.now()
+
+    try:
+        chat = model.start_chat(history=history)
+        response = chat.send_message(user_message)
+        bot_response = response.text
+        with _sessions_lock:
+            history.append({"role": "user", "parts": [user_message]})
+            history.append({"role": "model", "parts": [bot_response]})
+        return jsonify({"ok": True, "message": bot_response})
+    except Exception as e:
+        logger.error(f"AI chat error (key={session_key}): {e}")
+        return jsonify({"error": "AI error"}), 500
+
+
+# ---------------------------------------------------------------------------
 # API: AI Chat (Empathetic)
 # ---------------------------------------------------------------------------
 
@@ -374,35 +408,8 @@ def chat_message():
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "no session"}), 401
-
-    data = request.get_json()
-    user_message = data.get("message", "")
-
-    # Crisis detection — same as navigator
-    if CRISIS_PATTERN.search(user_message):
-        return jsonify({"ok": True, "message": CRISIS_RESPONSE, "crisis": True})
-    if EMERGENCY_PATTERN.search(user_message):
-        return jsonify({"ok": True, "message": EMERGENCY_RESPONSE, "crisis": True})
-
-    with _sessions_lock:
-        sess = chat_sessions.get(user_id)
-        if not sess:
-            return jsonify({"error": "no active chat"}), 400
-        model = sess["model"]
-        history = sess["history"]
-        sess["last_active"] = datetime.now()
-
-    try:
-        chat = model.start_chat(history=history)
-        response = chat.send_message(user_message)
-        bot_response = response.text
-        with _sessions_lock:
-            history.append({"role": "user", "parts": [user_message]})
-            history.append({"role": "model", "parts": [bot_response]})
-        return jsonify({"ok": True, "message": bot_response})
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        return jsonify({"error": "AI error"}), 500
+    user_message = request.get_json().get("message", "")
+    return _handle_ai_message(user_id, user_message)
 
 
 @app.route("/api/chat/end", methods=["POST"])
@@ -443,36 +450,8 @@ def navigator_message():
     user_id = session.get("user_id")
     if not user_id:
         return jsonify({"error": "no session"}), 401
-
-    data = request.get_json()
-    user_message = data.get("message", "")
-
-    # Crisis detection
-    if CRISIS_PATTERN.search(user_message):
-        return jsonify({"ok": True, "message": CRISIS_RESPONSE, "crisis": True})
-    if EMERGENCY_PATTERN.search(user_message):
-        return jsonify({"ok": True, "message": EMERGENCY_RESPONSE, "crisis": True})
-
-    key = f"nav_{user_id}"
-    with _sessions_lock:
-        sess = chat_sessions.get(key)
-        if not sess:
-            return jsonify({"error": "no active navigator session"}), 400
-        model = sess["model"]
-        history = sess["history"]
-        sess["last_active"] = datetime.now()
-
-    try:
-        chat = model.start_chat(history=history)
-        response = chat.send_message(user_message)
-        bot_response = response.text
-        with _sessions_lock:
-            history.append({"role": "user", "parts": [user_message]})
-            history.append({"role": "model", "parts": [bot_response]})
-        return jsonify({"ok": True, "message": bot_response})
-    except Exception as e:
-        logger.error(f"Navigator error: {e}")
-        return jsonify({"error": "AI error"}), 500
+    user_message = request.get_json().get("message", "")
+    return _handle_ai_message(f"nav_{user_id}", user_message)
 
 
 @app.route("/api/navigator/end", methods=["POST"])
