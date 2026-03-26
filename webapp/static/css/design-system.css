@@ -428,15 +428,15 @@ body {
 .chat-bubble.bot {
   background: var(--sf-bg-card);
   border: 1px solid var(--sf-border);
-  margin-left: auto;
-  border-bottom-right-radius: 4px;
+  margin-right: auto;
+  border-bottom-left-radius: 4px;
 }
 
 .chat-bubble.user {
   background: var(--sf-primary);
   color: white;
-  margin-right: auto;
-  border-bottom-left-radius: 4px;
+  margin-left: auto;
+  border-bottom-right-radius: 4px;
 }
 
 .chat-input-bar {
