@@ -21,7 +21,7 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 MONGO_URI = os.getenv("MONGO_URI")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "shalva-webapp-secret-key-change-me")
+SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or os.urandom(32).hex()
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -51,6 +51,21 @@ users_collection = db.get_collection("users")
 
 # In-memory chat sessions (keyed by session id)
 chat_sessions = {}
+CHAT_SESSION_TTL = timedelta(hours=2)
+
+
+def _cleanup_stale_sessions():
+    """Remove chat sessions older than TTL."""
+    now = datetime.now()
+    stale = [k for k, v in chat_sessions.items() if now - v.get("last_active", now) > CHAT_SESSION_TTL]
+    for k in stale:
+        del chat_sessions[k]
+
+
+def _touch_session(key):
+    """Update last_active timestamp for a session."""
+    if key in chat_sessions:
+        chat_sessions[key]["last_active"] = datetime.now()
 
 
 def get_user_id():
@@ -333,12 +348,13 @@ def venting():
     content = data.get("content", "")
     save_for_analysis = data.get("save_for_analysis", False)
 
-    venting_collection.insert_one({
-        "user_id": user_id,
-        "content": content,
-        "save_for_analysis": save_for_analysis,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    })
+    if save_for_analysis:
+        venting_collection.insert_one({
+            "user_id": user_id,
+            "content": content,
+            "save_for_analysis": True,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        })
 
     return jsonify({"ok": True})
 
@@ -361,7 +377,8 @@ def chat_start():
         {"role": "user", "parts": [EMPATHY_PROMPT]},
         {"role": "model", "parts": [opening]},
     ]
-    chat_sessions[user_id] = {"model": model, "history": history, "type": "support"}
+    _cleanup_stale_sessions()
+    chat_sessions[user_id] = {"model": model, "history": history, "type": "support", "last_active": datetime.now()}
     return jsonify({"ok": True, "message": opening})
 
 
@@ -373,6 +390,12 @@ def chat_message():
 
     data = request.get_json()
     user_message = data.get("message", "")
+
+    # Crisis detection — same as navigator
+    if CRISIS_PATTERN.search(user_message):
+        return jsonify({"ok": True, "message": CRISIS_RESPONSE, "crisis": True})
+    if EMERGENCY_PATTERN.search(user_message):
+        return jsonify({"ok": True, "message": EMERGENCY_RESPONSE, "crisis": True})
 
     sess = chat_sessions.get(user_id)
     if not sess:
@@ -387,6 +410,7 @@ def chat_message():
         bot_response = response.text
         history.append({"role": "user", "parts": [user_message]})
         history.append({"role": "model", "parts": [bot_response]})
+        _touch_session(user_id)
         return jsonify({"ok": True, "message": bot_response})
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -419,7 +443,8 @@ def navigator_start():
         "היי! אני סוכן AI שמתמחה בבריאות הנפש בישראל.\n"
         "אפשר לשאול אותי על זכויות, טיפולים, עלויות, קופות חולים, קווי חירום ועוד."
     )
-    chat_sessions[f"nav_{user_id}"] = {"model": model, "history": [], "type": "navigator"}
+    _cleanup_stale_sessions()
+    chat_sessions[f"nav_{user_id}"] = {"model": model, "history": [], "type": "navigator", "last_active": datetime.now()}
     return jsonify({"ok": True, "message": opening})
 
 
@@ -452,6 +477,7 @@ def navigator_message():
         bot_response = response.text
         history.append({"role": "user", "parts": [user_message]})
         history.append({"role": "model", "parts": [bot_response]})
+        _touch_session(f"nav_{user_id}")
         return jsonify({"ok": True, "message": bot_response})
     except Exception as e:
         logger.error(f"Navigator error: {e}")

@@ -316,7 +316,12 @@ async function sendChatMessage() {
   try {
     const result = await api("/api/chat/message", { method: "POST", body: { message: msg } });
     document.getElementById("chatTyping").classList.remove("active");
-    if (result.message) addChatBubble(result.message, "bot");
+    if (result.crisis) {
+      const el = document.createElement("div");
+      el.className = "crisis-alert";
+      el.textContent = result.message;
+      document.getElementById("chatMessages").appendChild(el);
+    } else if (result.message) addChatBubble(result.message, "bot");
     else if (result.error) addChatBubble("מצטער, קרתה שגיאה. נסה שוב.", "bot");
   } catch (e) {
     document.getElementById("chatTyping").classList.remove("active");
@@ -720,8 +725,8 @@ async function resetData() {
 // ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
-document.addEventListener("DOMContentLoaded", () => {
-  initSession();
+document.addEventListener("DOMContentLoaded", async () => {
+  await initSession();
   initQuickReport();
   initFullReport();
   loadSettings();
@@ -733,7 +738,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (currentScreen === "screen-quick-report" && id !== "screen-quick-report") resetQuickReport();
     if (currentScreen === "screen-full-report" && id !== "screen-full-report") resetFullReport();
     if (currentScreen === "screen-venting" && id !== "screen-venting") resetVenting();
-    if (currentScreen === "screen-panic" && id !== "screen-panic") stopBreathing();
+    if (currentScreen === "screen-panic" && id !== "screen-panic") { stopBreathing(); stopGuided(); }
     origShowScreen(id);
   };
 });
