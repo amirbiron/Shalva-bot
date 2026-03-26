@@ -387,10 +387,12 @@ async function sendNavTopic(topic) {
       document.getElementById("navMessages").appendChild(el);
     } else if (result.message) {
       addNavBubble(result.message, "bot");
+    } else if (result.error) {
+      addNavBubble("מצטער, קרתה שגיאה. נסה שוב.", "bot");
     }
   } catch (e) {
     document.getElementById("navTyping").classList.remove("active");
-    addNavBubble("שגיאה. נסה שוב.", "bot");
+    addNavBubble("שגיאת תקשורת. נסה שוב.", "bot");
   }
 }
 
@@ -413,10 +415,12 @@ async function sendNavMessage() {
       document.getElementById("navMessages").appendChild(el);
     } else if (result.message) {
       addNavBubble(result.message, "bot");
+    } else if (result.error) {
+      addNavBubble("מצטער, קרתה שגיאה. נסה שוב.", "bot");
     }
   } catch (e) {
     document.getElementById("navTyping").classList.remove("active");
-    addNavBubble("שגיאה. נסה שוב.", "bot");
+    addNavBubble("שגיאת תקשורת. נסה שוב.", "bot");
   }
 }
 

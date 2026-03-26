@@ -4,11 +4,9 @@ Flask backend serving the SPA and providing API endpoints.
 """
 
 import os
-import json
 import logging
 import threading
 from datetime import datetime, timedelta
-from functools import wraps
 
 import pymongo
 import google.generativeai as genai
@@ -22,7 +20,10 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 MONGO_URI = os.getenv("MONGO_URI")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or os.urandom(32).hex()
+SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+if not SECRET_KEY:
+    logger.warning("FLASK_SECRET_KEY not set — sessions will not survive restarts. Set it in env vars.")
+    SECRET_KEY = os.urandom(32).hex()
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -44,7 +45,6 @@ db = client.get_database("ShalvaBotDB")
 reports_collection = db.get_collection("anxiety_reports")
 venting_collection = db.get_collection("free_venting")
 settings_collection = db.get_collection("user_settings")
-users_collection = db.get_collection("users")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -62,13 +62,6 @@ def _cleanup_stale_sessions():
     stale = [k for k, v in chat_sessions.items() if now - v.get("last_active", now) > CHAT_SESSION_TTL]
     for k in stale:
         del chat_sessions[k]
-
-
-def _touch_session(key):
-    """Update last_active timestamp for a session."""
-    with _sessions_lock:
-        if key in chat_sessions:
-            chat_sessions[key]["last_active"] = datetime.now()
 
 
 def ensure_user_settings(user_id: int) -> dict:
@@ -391,20 +384,21 @@ def chat_message():
     if EMERGENCY_PATTERN.search(user_message):
         return jsonify({"ok": True, "message": EMERGENCY_RESPONSE, "crisis": True})
 
-    sess = chat_sessions.get(user_id)
-    if not sess:
-        return jsonify({"error": "no active chat"}), 400
-
-    model = sess["model"]
-    history = sess["history"]
+    with _sessions_lock:
+        sess = chat_sessions.get(user_id)
+        if not sess:
+            return jsonify({"error": "no active chat"}), 400
+        model = sess["model"]
+        history = sess["history"]
+        sess["last_active"] = datetime.now()
 
     try:
         chat = model.start_chat(history=history)
         response = chat.send_message(user_message)
         bot_response = response.text
-        history.append({"role": "user", "parts": [user_message]})
-        history.append({"role": "model", "parts": [bot_response]})
-        _touch_session(user_id)
+        with _sessions_lock:
+            history.append({"role": "user", "parts": [user_message]})
+            history.append({"role": "model", "parts": [bot_response]})
         return jsonify({"ok": True, "message": bot_response})
     except Exception as e:
         logger.error(f"Chat error: {e}")
@@ -460,20 +454,21 @@ def navigator_message():
         return jsonify({"ok": True, "message": EMERGENCY_RESPONSE, "crisis": True})
 
     key = f"nav_{user_id}"
-    sess = chat_sessions.get(key)
-    if not sess:
-        return jsonify({"error": "no active navigator session"}), 400
-
-    model = sess["model"]
-    history = sess["history"]
+    with _sessions_lock:
+        sess = chat_sessions.get(key)
+        if not sess:
+            return jsonify({"error": "no active navigator session"}), 400
+        model = sess["model"]
+        history = sess["history"]
+        sess["last_active"] = datetime.now()
 
     try:
         chat = model.start_chat(history=history)
         response = chat.send_message(user_message)
         bot_response = response.text
-        history.append({"role": "user", "parts": [user_message]})
-        history.append({"role": "model", "parts": [bot_response]})
-        _touch_session(f"nav_{user_id}")
+        with _sessions_lock:
+            history.append({"role": "user", "parts": [user_message]})
+            history.append({"role": "model", "parts": [bot_response]})
         return jsonify({"ok": True, "message": bot_response})
     except Exception as e:
         logger.error(f"Navigator error: {e}")
